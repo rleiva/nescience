@@ -42,11 +42,11 @@ print("Score:", model.score(X_test, y_test))
 
 ## Help
 
- * Examples of usage: https://github.com/autofastml/examples
+ * Examples of usage: https://github.com/fastautoml/examples
 
 ## Authors
 
-[R. Leiva](https://github.com/rleiva) and [contributors](https://github.com/autofastml/Contributors.md).
+[R. Leiva](https://github.com/rleiva) and [contributors](https://github.com/fastautoml/Contributors.md).
 
 ## License
 
