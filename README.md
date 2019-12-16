@@ -11,7 +11,7 @@
 
 ## User Installation
 
-If you already have a working installation of ``scikit-learn`` and ``pandas``, the easiest way to install ``fastautoml`` is using ``pip``
+If you already have a working installation of ``scikit-learn`` and ``pandas``, the easiest way to install ``fastautoml`` is using ``pip``:
 
 ```
 pip install -U fastautoml
@@ -23,12 +23,12 @@ or ``conda``:
 conda install fastautoml
 ```
 
-## Running the tests
+## Running
 
 The following example shows how to compute an optimal model for the MNIST dataset included with ``scikit-learn``.
 
 ```
-from fastautoml import AutoClassifier
+from fastautoml.fastautoml import AutoClassifier
 from sklearn.datasets import load_digits
 from sklearn.model_selection import train_test_split
 
@@ -40,20 +40,19 @@ model.fit(X_train, y_train)
 print("Score:", model.score(X_test, y_test))
 ```
 
-## Help and Support
+## Help
 
- * Website: http://fastautoml.org
- * HTML documentation: http://fastautoml.org
+ * Examples of usage: https://github.com/autofastml/examples
 
 ## Authors
 
-* **R. Leiva** - *Initial work* - [R. Leiva](https://github.com/rleiva)
-
-See also the list of [contributors](https://github.com/autofastml/contributors) who participated in this project.
+[R. Leiva](https://github.com/rleiva) and [contributors](https://github.com/autofastml/Contributors.md).
 
 ## License
 
 This project is licensed under the 3-Clause BSD license - see the [LICENSE.md](LICENSE.md) file for details.
 
+## Aknowledgements
 
+This project has received funding from the European Union's Horizon 2020 research and innovation programme under grant agreement No 732667 [RECAP](https://recap-project.eu/)
 
