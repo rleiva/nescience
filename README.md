@@ -14,13 +14,7 @@
 If you already have a working installation of ``scikit-learn`` and ``pandas``, the easiest way to install ``fastautoml`` is using ``pip``:
 
 ```
-pip install -U fastautoml
-```
-
-or ``conda``:
-
-```
-conda install fastautoml
+pip install fastautoml
 ```
 
 ## Running
