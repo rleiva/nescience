@@ -36,11 +36,13 @@ print("Score:", model.score(X_test, y_test))
 
 ## Help
 
+ * [https://github.com/rleiva/fastautoml/wiki/UserGuide] User Guide
+ * Reference API
  * [Examples of usage](examples)
 
 ## Authors
 
-[R. Leiva](https://github.com/rleiva) and [contributors](Contributors.md).
+[R. Leiva](https://github.com/rleiva) and [contributors](Contributors.md). If you want to contribute to this project, please contact with the main author.
 
 ## License
 
