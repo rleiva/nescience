@@ -1,6 +1,6 @@
 # fastautoml 
 
-``fastautoml`` is a Python module for fast auto machine learning built on top of ``scikit-learn``.
+``fastautoml`` is powerful and computationally efficient Python library for automated machine learning, intended for data scientists and with the goal of maximize their productivity.
 
 ## Prerequisites
 
