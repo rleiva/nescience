@@ -37,7 +37,7 @@ print("Score:", model.score(X_test, y_test))
 ## Help
 
  * [User Guide](https://github.com/rleiva/fastautoml/wiki/User-Guide)
- * Reference API
+ * Reference API (TBD)
  * [Examples of usage](examples)
 
 ## Authors
