@@ -7,7 +7,7 @@ with the minimum nescience principle
 @mail:      rgarcialeiva@gmail.com
 @web:       http://www.mathematicsunknown.com/
 @copyright: GNU GPLv3
-@version:   0.5
+@version:   0.6
 
 """
 
@@ -1048,6 +1048,7 @@ class Surfeit(BaseEstimator, SelectorMixin):
         string = string + "            y_hat = estimator.classes_[i]\n"
         string = string + "    return y_hat\n"
 
+        return string
 
     """
     Convert a DecisionTreeRegressor into a string
@@ -1644,6 +1645,8 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         
         for reg in self.regressors:
             
+            print("Regressor: " + str(reg))
+            
             (new_nsc, new_model, new_viu) = reg()
             
             if new_nsc < nsc:
@@ -1895,7 +1898,7 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         return (nsc, nn, viu)
 
 
-class TimeSeries(BaseEstimator, RegressorMixin):
+class AutoTimeSeries(BaseEstimator, RegressorMixin):
     
     # TODO: Class documentation
 
@@ -1905,9 +1908,8 @@ class TimeSeries(BaseEstimator, RegressorMixin):
         
         self.models = [
             self.AutoRegressive,
-            # self.MovingAverage,
-            # self.ExponentialSmoothing,
-            # self.HoltWinters
+            self.MovingAverage,
+            self.ExponentialSmoothing
         ]
         
         return None
@@ -1992,17 +1994,23 @@ class TimeSeries(BaseEstimator, RegressorMixin):
         return self.model.predict(msdX)
 
 
-    def score(self, X, y):
+    def score(self, ts):
         """
-        Evaluate the performance of the current model given a test dataset
+        Evaluate the performance of the current model given a test time series
 
-           * X = list([[x11, x12, x13, ...], ..., [xn1, xn2, ..., xnm]])
-           * y = list([y1, ..., yn])
-    
+        Parameters
+        ----------            
+        ts : array-like, shape (n_samples)
+            The time series as numbers.
+            
+        Returns
+        -------    
         Return one minus the mean error
         """
         
         # TODO: Check that we have a model trained
+
+        X, y = self._whereIsTheX(ts)
         
         if self.viu is None:
             msdX = X
@@ -2064,16 +2072,90 @@ class TimeSeries(BaseEstimator, RegressorMixin):
 
 
     def MovingAverage(self):
+        
+        # Variables in use
+        viu = np.zeros(self.X.shape[1], dtype=np.int)
 
-        return None
+        # Select the t-1 feature
+        viu[-1] = 1        
+
+        # Evaluate the model        
+        msdX = self.X[:,np.where(viu)[0]]        
+        model = LinearRegression()
+        model.coef_ = np.array([1])
+        model.intercept_ = np.array([0])
+        
+        prd  = model.predict(msdX)
+        nsc = self.nescience.nescience(model, subset=viu, predictions=prd)
+        
+        for i in np.arange(2, self.X.shape[1] - 1):
+            
+            new_viu = viu.copy()
+            
+            # Select the the most relevant feature
+            new_viu[-i] = 1        
+
+            # Evaluate the model        
+            msdX = self.X[:,np.where(new_viu)[0]]
+            new_model = LinearRegression()
+            new_model.coef_ = np.repeat([1/i], i)
+            new_model.intercept_ = np.array([0])
+
+            prd  = new_model.predict(msdX)
+            new_nsc = self.nescience.nescience(new_model, subset=new_viu, predictions=prd)
+                        
+            # Save data if nescience has been reduced                        
+            if new_nsc > nsc:
+                break
+              
+            model     = new_model
+            nsc       = new_nsc
+            viu       = new_viu
+        
+        return (nsc, model, viu)
 
 
     def ExponentialSmoothing(self):
         
-        return None
+        alpha = 0.2
+        
+        # Variables in use
+        viu = np.zeros(self.X.shape[1], dtype=np.int)
 
+        # Select the t-1 feature
+        viu[-1] = 1        
 
-    def HoltWinters(self):
+        # Evaluate the model        
+        msdX = self.X[:,np.where(viu)[0]]        
+        model = LinearRegression()
+        model.coef_ = np.array([1])
+        model.intercept_ = np.array([0])
+        
+        prd  = model.predict(msdX)
+        nsc = self.nescience.nescience(model, subset=viu, predictions=prd)
+        
+        for i in np.arange(2, self.X.shape[1] - 1):
+            
+            new_viu = viu.copy()
+            
+            # Select the the most relevant feature
+            new_viu[-i] = 1        
 
-        return None
-    
+            # Evaluate the model        
+            msdX = self.X[:,np.where(new_viu)[0]]
+            new_model = LinearRegression()
+            new_model.coef_ = np.repeat([(1-alpha)**i], i)
+            new_model.intercept_ = np.array([0])
+
+            prd  = new_model.predict(msdX)
+            new_nsc = self.nescience.nescience(new_model, subset=new_viu, predictions=prd)
+                        
+            # Save data if nescience has been reduced                        
+            if new_nsc > nsc:
+                break
+              
+            model     = new_model
+            nsc       = new_nsc
+            viu       = new_viu
+        
+        return (nsc, model, viu)
