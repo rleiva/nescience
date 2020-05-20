@@ -1,5 +1,4 @@
 """
-
 Fast auto machine learning
 with the minimum nescience principle
 
@@ -7,20 +6,23 @@ with the minimum nescience principle
 @mail:      rgarcialeiva@gmail.com
 @web:       http://www.mathematicsunknown.com/
 @copyright: GNU GPLv3
-@version:   0.6
+@version:   0.7
 
 """
 
 import numpy  as np
-import pandas as pd
 
+import warnings
 import math
+import re
 
 from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 from sklearn.feature_selection.base import SelectorMixin
-
 from sklearn.utils import check_X_y
 from sklearn.utils.validation import check_is_fitted
+from sklearn.preprocessing import KBinsDiscretizer
+
+from scipy.optimize import differential_evolution
 
 # Compressors
 
@@ -47,99 +49,160 @@ from sklearn.neural_network import MLPRegressor
 # - Autoregression
 # - Moving Average
 # - Simple Exponential Smoothing
-# - Holt Winter’s Exponential Smoothing
 
 #
-# Helper Functions
+# Private Helper Functions
 #
 
-def discretize(x):
-    """
-    Discretize the variable x if needed
+"""
+Discretize the variable x if needed
     
-    Parameters
-    ----------
-    x : array-like, shape (n_samples)
+Parameters
+----------
+x :     array-like, shape (n_samples)
         The variable to be discretized, if needed.
        
-    Returns
-    -------
-    Return the miscoding (float)
-    """
+Returns
+-------
+A new discretized vector.
+"""
+def _discretize_vector(x):
 
-    if len(np.unique(x)) == 1:
-        # Do not discretize if all the points belong to the same category
-        new_x = np.zeros(len(x))
-            
-    elif len(np.unique(x)) > int(np.sqrt(len(x))):
-        # Too many unique values wrt samples
-        nbins = int(np.sqrt(len(x)))
-        tmp   = pd.qcut(x, q=nbins, duplicates='drop')
-        new_x = list(pd.Series(tmp).cat.codes)
-            
-        if len(np.unique(new_x)) == 1:
-            # Discretization went too far
-            new_x = x
-                
-    else:
-        new_x = x
+    new_x = x.copy()
+
+    # Optimal number of bins
+    n_bins = int(np.sqrt(len(new_x)))
+    
+    # Correct the number of bins if it is too small
+    if n_bins <= 1:
+        n_bins = 2
+
+    # Check if we have too many unique values wrt samples
+    if len(np.unique(new_x)) > n_bins:
         
+        new_x = new_x.reshape(-1, 1)
+    
+        # Avoid those annoying warnings
+        with warnings.catch_warnings():
+            
+            warnings.simplefilter("ignore")
+
+            est = KBinsDiscretizer(n_bins=n_bins, encode='ordinal', strategy='kmeans')
+            est.fit(new_x)
+            new_x = est.transform(new_x)
+            
+        new_x = new_x[:,0]
+
     return new_x
 
 
-def optimal_code_length(x):
-    """
-    Compute the lenght of a list of values encoded using an optimal code
+"""
+Discretize a dataset X
     
-    Parameters
-    ----------
-    x : array-like, shape (n_samples)
-        The values to be encoded.
+Parameters
+----------
+X :     array-like, shape (n_samples, n_features)
        
-    Returns
-    -------
-    Return the length of the encoded dataset (float)
-    """
+Returns
+-------
+A new discretized version of the dataset (numpy array)
+"""
+def _discretize_matrix(X):
+
+    newX = list()
+    
+    for i in np.arange(X.shape[1]):
+            
+        new_x = _discretize_vector(X[:,i])
+        newX.append(new_x)    
+    
+    newX = np.array(newX)
+    newX = np.transpose(newX)
+    
+    return newX
+
+
+"""
+Compute the lenght of a list of values encoded using an optimal code
+    
+Parameters
+----------
+x :         array-like, shape (n_samples)
+            The values to be encoded.
+       
+Returns
+-------
+Return the length of the encoded dataset (float)
+"""
+def _optimal_code_length(x):
     
     # Discretize the variable x if needed
-    
-    new_x = discretize(x)
+    new_x = _discretize_vector(x)
         
     # Compute the optimal length
-        
     unique, count = np.unique(new_x, return_counts=True)
     ldm = np.sum(count * ( - np.log2(count / len(new_x))))
-                    
+    
     return ldm
 
 
-def optimal_code_length_join(x1, x2):
-    """
-    Compute the lenght of the join of two variable
-    encoded using an optimal code
+"""
+Compute the joint lenght of two variables
+encoded using an optimal code
     
-    Parameters
-    ----------
-    x1 : array-like, shape (n_samples)
-         The values of the first variable.
-         
-    x2 : array-like, shape (n_samples)
-         The values of the second variable.         
-       
-    Returns
-    -------
-    Return the length of the encoded join dataset (float)    
-    """
+Parameters
+----------
+x1 :        array-like, shape (n_samples)
+            The values of the first variable.
+x2 :        array-like, shape (n_samples)
+            The values of the second variable.
+   
+Returns
+-------
+Return the length of the encoded joint dataset (float)    
+"""
+def _optimal_code_length_joint(x1, x2):
     
     # Discretize the variables X1 and X2 if needed
-        
-    new_x1 = discretize(x1)
-    new_x2 = discretize(x2)
+    new_x1 = _discretize_vector(x1)
+    new_x2 = _discretize_vector(x2)
     
     # Compute the optimal length
-    Join =  list(zip(new_x1, new_x2))
-    unique, count = np.unique(Join, return_counts=True, axis=0)
-    ldm = np.sum(count * ( - np.log2(count / len(Join))))
+    Joint =  list(zip(new_x1, new_x2))
+    unique, count = np.unique(Joint, return_counts=True, axis=0)
+    ldm = np.sum(count * ( - np.log2(count / len(Joint))))
+                                    
+    return ldm
+
+
+"""
+Compute the joint lenght of two variables and the target
+encoded using an optimal code
+    
+Parameters
+----------
+x1 :        array-like, shape (n_samples)
+            The values of the first variable.         
+x2 :        array-like, shape (n_samples)
+            The values of the second variable.         
+y  :        array-like, shape (n_samples)
+            The target values as numbers or strings.
+   
+Returns
+-------
+Return the length of the encoded joint dataset (float)    
+"""
+def _optimal_code_length_3joint(x1, x2, y):
+  
+    # Discretize the variables X1 and X2 if needed
+    new_x1 = _discretize_vector(x1)
+    new_x2 = _discretize_vector(x2)
+    new_y  = _discretize_vector(y)
+            
+    # Compute the optimal length
+    Joint =  list(zip(new_x1, new_x2, new_y))
+    unique, count = np.unique(Joint, return_counts=True, axis=0)
+    ldm = np.sum(count * ( - np.log2(count / len(Joint))))
                     
     return ldm
 
@@ -149,8 +212,26 @@ def optimal_code_length_join(x1, x2):
 # 
 
 class Miscoding(BaseEstimator, SelectorMixin):
-    
-    # TODO: Class documentation
+    """
+    Given a dataset X = {x1, ..., xp} composed by p features, and a target
+    variable y, the miscoding of the feature xj measures how difficult is to
+    reconstruct y given xj, and the other way around. We are not only
+    interested in to identify how much information xj contains about y, but
+    also if xj contains additional information that is not related
+    to y (which is a bad thing).
+
+    The fastautoml.Miscoding class allow us to compute the relevance of
+    features, the quality of a dataset, and select the optimal subset of
+    features to include in a study
+
+    Example of usage:
+        
+        from fastautoml.fastautoml import Miscoding
+        miscoding = Miscoding()
+        miscoding.fit(X, y)
+        msd = miscoding.miscoding_features()
+
+    """
     
     def __init__(self):
         
@@ -168,7 +249,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
             Sample vectors from which to compute miscoding.
             
         y : array-like, shape (n_samples)
-            The target values (class labels) as numbers or strings.
+            The target values as numbers or strings.
             
         Returns
         -------
@@ -176,67 +257,52 @@ class Miscoding(BaseEstimator, SelectorMixin):
         """
         
         self.X, self.y = check_X_y(X, y, dtype=None)
-
-        # Regular miscoding
-        self.regular = self._regular_miscoding()
-
-        # Adjusted miscoding
-        self.adjusted = 1 - self.regular
-        self.adjusted = self.adjusted / np.sum(self.adjusted)
-
-        # Partial miscoding
-        self.partial = self.adjusted - self.regular / np.sum(self.regular)
-
+        
         return self
 
-    
-    # TODO: do we have to support this?
-    def _get_support_mask(self):
-        
-        check_is_fitted(self, 'tcc_')
-        
-        return None
 
-
-    def miscoding_features(self, type='adjusted'):
+    def miscoding_features(self, mode='adjusted', redundancy=True):
         """
-        Return the miscoding of the target given individual features
+        Return the miscoding of the target given the features
 
         Parameters
         ----------
-        type : the type of miscoding we want to compute, possible values
-               are 'regular', 'adjusted' and 'partial'.
+        mode  : the mode of miscoding, possible values are 'regular' for
+                the true miscoding, 'normalized' for normalized values that
+                sum one, and 'partial' with positive and negative
+                contritutions to dataset miscoding.
+        redundancy: if True avoid redundant features during the
+                    computation of miscoding
             
         Returns
         -------
         Return a numpy array with the miscodings
         """
         
-        check_is_fitted(self, 'regular')
+        check_is_fitted(self, 'X')
         
-        if type == 'regular':
-            return self.regular
-        elif type == 'adjusted':
-            return self.adjusted
-        elif type == 'partial':
-            return self.partial
-        
-        # TODO: rise exception
-        return None
-
+        if redundancy:
+            miscoding = self._miscoding_features_joint(mode)
+        else:
+            miscoding = self._miscoding_features_single(mode)
+            
+        return miscoding
+            
 
     def miscoding_model(self, model):
         """
-        Compute the global miscoding of the dataset given a model
+        Compute the partial joint miscoding of the dataset used by a model
         
         Parameters
         ----------
-        model : a model of one of the supported classeses
+        model : a model of one of the supported classes
                     
         Returns
         -------
         Return the miscoding (float)
         """
+
+        check_is_fitted(self, 'X')
         
         if isinstance(model, MultinomialNB):
             subset = self._MultinomialNB(model)
@@ -256,56 +322,112 @@ class Miscoding(BaseEstimator, SelectorMixin):
             subset = self._MLPRegressor(model)            
         else:
             # Rise exception
-            # TODO: Disinguish between TypeError and NotImplementedError
-            raise NotImplementedError('Model not supported')
+            raise NotImplementedError('Model {!r} not supported'
+                                     .format(type(model)))
 
         return self.miscoding_subset(subset)
         
 
     def miscoding_subset(self, subset):
         """
-        Compute the global miscoding of a subset of the dataset
+        Compute the partial joint miscoding of a subset of the dataset
         
         Parameters
         ----------
         subset : array-like, shape (n_features)
                  1 if the attribute is in use, 0 otherwise
-            
+        
         Returns
         -------
         Return the miscoding (float)
         """
-        
-        # TODO: check the format of subset
-        
-        miscoding = np.dot(subset, self.partial)
+
+        check_is_fitted(self, 'X')
+
+        partial = self.miscoding_features(mode='partial')
+
+        miscoding = np.dot(subset, partial)
         miscoding = 1 - miscoding
-                       
+
         return miscoding
 
-    
-    """    
-    Compute the regular miscoding of each feature
-          
-    Return a numpy array with the regular miscodings
+
+    def features_matrix(self):
+        """
+        Compute a matrix of adjusted miscodings of each feature
+        assuming the others
+        
+        Returns
+        -------
+        Return the matrix with the miscodings (float)
+        """
+                
+        miscoding = np.zeros([self.X.shape[1], self.X.shape[1]])
+
+        # Compute the regular matrix
+
+        for i in np.arange(self.X.shape[1]-1):
+            
+            ldm_X1 = _optimal_code_length(self.X[:,i])
+
+            for j in np.arange(i+1, self.X.shape[1]):
+                 
+                ldm_X2   = _optimal_code_length(self.X[:,j])
+                ldm_X1X2 = _optimal_code_length_joint(self.X[:,i], self.X[:,j])
+                       
+                mscd = ( ldm_X1X2 - min(ldm_X1, ldm_X2) ) / max(ldm_X1, ldm_X2)
+                
+                miscoding[i, j] = mscd
+                miscoding[j, i] = mscd
+                
+        # Compute the normalized matrix
+        
+        normalized = np.zeros([self.X.shape[1], self.X.shape[1]])
+        
+        for i in np.arange(self.X.shape[1]):
+
+            normalized[i,:] = 1 - miscoding[i,:]
+            normalized[i,:] = normalized[i,:] / np.sum(normalized[i,:])
+
+        return normalized
+
+
+    # TODO: do we have to support this?
+    def _get_support_mask(self):
+        
+        check_is_fitted(self, 'tcc_')
+        
+        return None
+
+
     """
-    def _regular_miscoding(self):
-         
+    Return the miscoding of the target given the features
+
+    Parameters
+    ----------
+    mode  : the mode of miscoding, possible values are 'regular' for
+            the true miscoding, 'normalized' for normalized values that
+            sum one, and 'partial' with positive and negative
+            contritutions to dataset miscoding.
+            
+    Returns
+    -------
+    Return a numpy array with the miscodings
+    """
+    def _miscoding_features_single(self, mode='adjusted'):
+                 
         miscoding = list()
         
         # Discretize y and compute the encoded length
         
-        Resp  = discretize(self.y)
-        ldm_y = optimal_code_length(self.y)
+        ldm_y = _optimal_code_length(self.y)
 
         for i in np.arange(self.X.shape[1]):
 
             # Discretize feature and compute lengths
             
-            Pred  = discretize(self.X[:,i])
-            ldm_X = optimal_code_length(self.X[:,i])
-            
-            ldm_Xy = optimal_code_length_join(Resp, Pred)
+            ldm_X  = _optimal_code_length(self.X[:,i])
+            ldm_Xy = _optimal_code_length_joint(self.y, self.X[:,i])
 
             # Compute miscoding
                        
@@ -313,7 +435,148 @@ class Miscoding(BaseEstimator, SelectorMixin):
                 
             miscoding.append(mscd)
                 
-        return np.array(miscoding)
+        miscoding = np.array(miscoding)
+
+        if mode == 'regular':
+            return miscoding
+        elif mode == 'adjusted':
+            adjusted = 1 - miscoding
+            adjusted = adjusted / np.sum(adjusted)
+            return adjusted
+        elif mode == 'partial':
+            adjusted = 1 - miscoding
+            adjusted = adjusted / np.sum(adjusted)
+            partial  = adjusted - miscoding / np.sum(miscoding)
+            return partial
+
+        valid_mode = ('regular', 'adjusted', 'partial')
+        raise ValueError("Valid options for 'mode' are {}. "
+                         "Got mode={!r} instead."
+                         .format(valid_mode, mode))        
+
+
+    """
+    Return the joint redundancy of the target given pairs features
+
+    Parameters
+    ----------
+    mode  : the mode of miscoding, possible values are 'regular' for
+            the joint redundancy, 'normalized' for normalized values that
+            sum one, and 'partial' with positive and negative
+            contritutions to dataset joint redundancy.
+            
+    Returns
+    -------
+    Return a numpy array with the miscodings
+    """
+    def _miscoding_features_joint(self, mode='adjusted'):
+
+        # Compute non-redundant miscoding
+        mscd = self._miscoding_features_single(mode='regular')
+
+        if self.X.shape[1] == 1:
+            # With one single attribute we cannot compute the joint miscoding
+            return mscd
+
+        #
+        # Compute the joint miscoding matrix
+        #         
+               
+        red_matrix = np.ones([self.X.shape[1], self.X.shape[1]])
+
+        ldm_y = _optimal_code_length(self.y)
+        new_y = _discretize_vector(self.y)
+        new_X = _discretize_matrix(self.X)
+
+        for i in np.arange(self.X.shape[1]-1):
+            
+            new_x1 = new_X[:,i]
+
+            for j in np.arange(i+1, self.X.shape[1]):
+                
+                new_x2 = new_X[:,j]
+                
+                Joint =  list(zip(new_x1, new_x2))
+                unique, count = np.unique(Joint, return_counts=True, axis=0)
+                ldm = np.sum(count * ( - np.log2(count / len(Joint))))
+                
+                ldm_X1X2  = ldm
+                
+                Joint =  list(zip(new_x1, new_x2, new_y))
+                unique, count = np.unique(Joint, return_counts=True, axis=0)
+                ldm = np.sum(count * ( - np.log2(count / len(Joint))))
+                            
+                ldm_X1X2Y = ldm
+                       
+                tmp = ( ldm_X1X2Y - min(ldm_X1X2, ldm_y) ) / max(ldm_X1X2, ldm_y)
+                                
+                red_matrix[i, j] = tmp
+                red_matrix[j, i] = tmp
+         
+               
+        #
+        # Compute the joint miscoding 
+        #
+        
+        viu       = np.zeros(self.X.shape[1], dtype=np.int8)
+        miscoding = np.zeros(self.X.shape[1])
+
+        # Select the first two variables with smaller joint miscoding
+        
+        loc1, loc2 = np.unravel_index(np.argmin(red_matrix, axis=None), red_matrix.shape)
+        jmscd1 = jmscd2 = red_matrix[loc1, loc2]
+        
+        viu[loc1] = 1
+        viu[loc2] = 1
+
+        # Scale down one of them
+                
+        tmp1 = mscd[loc1]
+        tmp2 = mscd[loc2]
+        
+        if tmp1 < tmp2:
+            jmscd1 = jmscd1 * tmp1 / tmp2
+            miscoding[loc1] = jmscd1
+            miscoding[loc2] = jmscd2
+        else:
+            jmscd2 = jmscd2 * tmp2 / tmp1
+            miscoding[loc1] = jmscd1
+            miscoding[loc2] = jmscd2
+ 
+        # Iterate over the number of features
+        
+        tmp = np.ones(self.X.shape[1]) * np.inf
+        
+        for i in np.arange(2, self.X.shape[1]):
+
+            for j in np.arange(self.X.shape[1]):
+            
+                if viu[j] == 1:
+                    continue
+
+                tmp[j] = (1 / np.sum(viu)) * np.sum(red_matrix[np.where(viu == 1), j])
+                            
+            viu[np.argmin(tmp)] = 1
+            miscoding[np.argmin(tmp)] = np.min(tmp)
+
+            tmp = np.ones(self.X.shape[1]) * np.inf
+
+        if mode == 'regular':
+            return miscoding
+        elif mode == 'adjusted':
+            adjusted = 1 - miscoding
+            adjusted = adjusted / np.sum(adjusted)
+            return adjusted
+        elif mode == 'partial':
+            adjusted = 1 - miscoding
+            adjusted = adjusted / np.sum(adjusted)
+            partial  = adjusted - miscoding / np.sum(miscoding)
+            return partial
+
+        valid_mode = ('regular', 'adjusted', 'partial')
+        raise ValueError("Valid options for 'mode' are {}. "
+                         "Got mode={!r} instead."
+                         .format(valid_mode, mode))
 
 
     """
@@ -322,8 +585,6 @@ class Miscoding(BaseEstimator, SelectorMixin):
     Return array with the attributes in use
     """
     def _MultinomialNB(self, estimator):
-
-        # TODO: sanity check over estimator
 
         # All the attributes are in use
         attr_in_use = np.ones(self.X.shape[1], dtype=int)
@@ -337,8 +598,6 @@ class Miscoding(BaseEstimator, SelectorMixin):
     Return array with the attributes in use
     """
     def _DecisionTreeClassifier(self, estimator):
-
-        # TODO: sanity check over estimator
 
         attr_in_use = np.zeros(self.X.shape[1], dtype=int)
         features = set(estimator.tree_.feature[estimator.tree_.feature >= 0])
@@ -355,8 +614,6 @@ class Miscoding(BaseEstimator, SelectorMixin):
     """
     def _LinearSVC(self, estimator):
 
-        # TODO: sanity check over estimator
-
         # All the attributes are in use
         attr_in_use = np.ones(self.X.shape[1], dtype=int)
             
@@ -370,8 +627,6 @@ class Miscoding(BaseEstimator, SelectorMixin):
     """
     def _MLPClassifier(self, estimator):
 
-        # TODO: sanity check over estimator
-
         attr_in_use = np.ones(self.X.shape[1], dtype=int)
             
         return attr_in_use
@@ -384,8 +639,6 @@ class Miscoding(BaseEstimator, SelectorMixin):
     """
     def _LinearRegression(self, estimator):
         
-        # TODO: sanity check over estimator
-
         attr_in_use = np.ones(self.X.shape[1], dtype=int)
             
         return attr_in_use
@@ -398,8 +651,6 @@ class Miscoding(BaseEstimator, SelectorMixin):
     """
     def _DecisionTreeRegressor(self, estimator):
         
-        # TODO: sanity check over estimator
-
         attr_in_use = np.zeros(self.X.shape[1], dtype=int)
         features = set(estimator.tree_.feature[estimator.tree_.feature >= 0])
         for i in features:
@@ -415,8 +666,6 @@ class Miscoding(BaseEstimator, SelectorMixin):
     """
     def _LinearSVR(self, estimator):
 
-        # TODO: sanity check over estimator
-
         attr_in_use = np.ones(self.X.shape[1], dtype=int)
             
         return attr_in_use
@@ -428,16 +677,15 @@ class Miscoding(BaseEstimator, SelectorMixin):
     """
     def _MLPRegressor(self, estimator):
 
-        # TODO: sanity check over estimator
-
         attr_in_use = np.ones(self.X.shape[1], dtype=int)
             
         return attr_in_use
 
+
 #
 # Class Inaccuracy
 #
-
+        
 class Inaccuracy(BaseEstimator, SelectorMixin):
     
     # TODO: Class documentation
@@ -465,7 +713,7 @@ class Inaccuracy(BaseEstimator, SelectorMixin):
         
         self.X, self.y = check_X_y(X, y, dtype=None)
                 
-        self.len_y = optimal_code_length(self.y)
+        self.len_y = _optimal_code_length(self.y)
         
         return self
 
@@ -482,11 +730,11 @@ class Inaccuracy(BaseEstimator, SelectorMixin):
         check_is_fitted(self, 'X')
         
         Pred = model.predict(self.X)
-        len_pred = optimal_code_length(Pred)
+        len_pred = _optimal_code_length(Pred)
         
-        len_join = optimal_code_length_join(Pred, self.y)
+        len_joint = _optimal_code_length_joint(Pred, self.y)
         
-        inacc = ( len_join - min(self.len_y, len_pred) ) / max(self.len_y, len_pred)
+        inacc = ( len_joint - min(self.len_y, len_pred) ) / max(self.len_y, len_pred)
 
         return inacc
 
@@ -503,11 +751,11 @@ class Inaccuracy(BaseEstimator, SelectorMixin):
         
         check_is_fitted(self, 'X')
         
-        len_pred = optimal_code_length(predictions)
+        len_pred = _optimal_code_length(predictions)
         
-        len_join = optimal_code_length_join(predictions, self.y)
+        len_joint = _optimal_code_length_joint(predictions, self.y)
         
-        inacc = ( len_join - min(self.len_y, len_pred) ) / max(self.len_y, len_pred)
+        inacc = ( len_joint - min(self.len_y, len_pred) ) / max(self.len_y, len_pred)
 
         return inacc    
 
@@ -549,7 +797,7 @@ class Surfeit(BaseEstimator, SelectorMixin):
         
         self.X, self.y = check_X_y(X, y, dtype=None)
                 
-        self.len_y = optimal_code_length(self.y)
+        self.len_y = _optimal_code_length(self.y)
         
         return self
     
@@ -590,8 +838,8 @@ class Surfeit(BaseEstimator, SelectorMixin):
             model_str = self._MLPRegressor(model)
         else:
             # Rise exception
-            # TODO: Disinguish between TypeError and NotImplementedError
-            raise NotImplementedError('Model not supported')
+            raise NotImplementedError('Model {!r} not supported'
+                                     .format(type(model)))
 
         return self.surfeit_string(model_str)
         
@@ -652,7 +900,6 @@ class Surfeit(BaseEstimator, SelectorMixin):
         if len(compressed) > len(model):
             return 1 - 3/4    # Experimental values for bzip
 
-
         if self.lcd < len(compressed):
             # redundancy = 1 - l(C(y)) / l(m)
             redundancy = 1 - self.lcd / len(model)
@@ -661,6 +908,7 @@ class Surfeit(BaseEstimator, SelectorMixin):
             redundancy = 1 - len(compressed) / len(model)
 
         return redundancy
+
     
     # TODO
     def _get_support_mask(self):
@@ -680,11 +928,11 @@ class Surfeit(BaseEstimator, SelectorMixin):
         # Discretize probabilities
         #
 
-        py    = discretize(np.exp(estimator.class_log_prior_))
+        py    = _discretize_vector(np.exp(estimator.class_log_prior_))
         
         theta = np.exp(estimator.feature_log_prob_)
         theta = theta.flatten()
-        theta = discretize(theta)
+        theta = _discretize_vector(theta)
         theta = np.array(theta)
         theta = theta.reshape(estimator.feature_log_prob_.shape)
         
@@ -733,7 +981,7 @@ class Surfeit(BaseEstimator, SelectorMixin):
         
         M = estimator.coef_
         M = M.flatten()
-        M = discretize(M)
+        M = _discretize_vector(M)
         M = np.array(M)
         M = M.reshape(estimator.coef_.shape)
         
@@ -850,7 +1098,8 @@ class Surfeit(BaseEstimator, SelectorMixin):
                 for coef in node:
                     annw.append(coef)
 
-        annw = discretize(annw)
+        annw = np.array(annw)
+        annw = _discretize_vector(annw)
         
         ind  = 0
         coefs = list()
@@ -873,7 +1122,8 @@ class Surfeit(BaseEstimator, SelectorMixin):
             for node in layer:
                 annb.append(node)
 
-        annb = discretize(annb)
+        annb = np.array(annb)
+        annb = _discretize_vector(annb)
         
         ind  = 0
         inters = list()
@@ -1020,7 +1270,7 @@ class Surfeit(BaseEstimator, SelectorMixin):
         
         M = estimator.coef_
         M = M.flatten()
-        M = discretize(M)
+        M = _discretize_vector(M)
         M = np.array(M)
         M = M.reshape(estimator.coef_.shape)
         
@@ -1110,7 +1360,8 @@ class Surfeit(BaseEstimator, SelectorMixin):
                 for coef in node:
                     annw.append(coef)
 
-        annw = discretize(annw)
+        annw = np.array(annw)
+        annw = _discretize_vector(annw)
         
         ind  = 0
         coefs = list()
@@ -1133,7 +1384,8 @@ class Surfeit(BaseEstimator, SelectorMixin):
             for node in layer:
                 annb.append(node)
 
-        annb = discretize(annb)
+        annb = np.array(annb)
+        annb = _discretize_vector(annb)
         
         ind  = 0
         inters = list()
@@ -1331,6 +1583,7 @@ class Nescience(BaseEstimator, SelectorMixin):
         # else -> rise exception
                 
         return nescience
+
     
     # TODO
     def _get_support_mask(self):
@@ -1354,7 +1607,9 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         return None
 
     
-    def fit(self, X, y):
+    def fit(self, X, y, auto=True):
+        
+        # TODO: document
 
         self.X, self.y = check_X_y(X, y, dtype=None)
 
@@ -1364,15 +1619,20 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         nsc = 1
         self.model = None
         self.viu   = None
+
+        # Find optimal model
+        if auto:
         
-        for clf in self.classifiers:
+            for clf in self.classifiers:
             
-            (new_nsc, new_model, new_viu) = clf()
+                # TODO: print classifier if verbose
+                
+                (new_nsc, new_model, new_viu) = clf()
                         
-            if new_nsc < nsc:
-                nsc   = new_nsc
-                self.model = new_model
-                self.viu   = new_viu
+                if new_nsc < nsc:
+                    nsc   = new_nsc
+                    self.model = new_model
+                    self.viu   = new_viu
         
         return self
 
@@ -1450,7 +1710,7 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
     
     def LinearSVC(self):
         
-        # No parameters to optimize
+        # No hyperparameters to optimize
                     
         model = LinearSVC(multi_class="crammer_singer")
         model.fit(self.X, self.y)
@@ -1617,7 +1877,7 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         return None
 
     
-    def fit(self, X, y):
+    def fit(self, X, y, auto=True):
         """
         Select the best model that explains y given X.
         
@@ -1628,6 +1888,8 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
             
         y : array-like, shape (n_samples)
             The target values (class labels) as numbers or strings.
+        
+        auto: find automatically the optimal model
             
         Returns
         -------
@@ -1643,16 +1905,21 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         self.model = None
         self.viu   = None
         
-        for reg in self.regressors:
+        # Find automatically the optimal model
+        
+        if auto:
             
-            print("Regressor: " + str(reg))
+            for reg in self.regressors:
             
-            (new_nsc, new_model, new_viu) = reg()
+                # TODO: Should be based on a verbose flag
+                print("Regressor: " + str(reg))
             
-            if new_nsc < nsc:
-                nsc   = new_nsc
-                self.model = new_model
-                self.viu   = new_viu
+                (new_nsc, new_model, new_viu) = reg()
+            
+                if new_nsc < nsc:
+                    nsc   = new_nsc
+                    self.model = new_model
+                    self.viu   = new_viu
         
         return self
 
@@ -1898,6 +2165,166 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         return (nsc, nn, viu)
 
 
+    # WARNING: Experimental, do not use in production
+    # TODO: build a sklearn wrapper around the model
+    def GrammaticalEvolution(self):
+        
+        # A grammar is a dictionary keyed by non terminal symbols
+        #     Each value is a list with the posible replacements
+        #         Each replacement contains a list with tokens
+        #
+        # The grammar in use is:
+        #
+        #     <expression> ::= self.X[:,<feature>] |
+        #                      <number> <scale> self.X[:,<feature>] |
+        #                      self.X[:,<feature>]) ** <exponent> |
+        #                      (<expression>) <operator> (<expression>)
+        #                 
+        #     <operator>   ::= + | - | * | /
+        #     <scale>      ::= *
+        #     <number>     ::= <digit> | <digit><digit0> | | <digit><digit0><digit0>
+        #     <digit>      ::= 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+        #     <digit0>     ::= 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+        #     <exponent>   ::= 2 | 3 | (1/2) | (1/3)
+        #     <feature>    ::= 1 .. self.X.shape[1]
+
+        self.grammar = {
+            "expression": [
+                            ["self.X[:,", "<feature>", "]"],
+                            ["<number>", "<scale>", "self.X[:,", "<feature>", "]"],
+                            ["self.X[:,", "<feature>", "]**", "<exponent>"],
+                            ["(", "<expression>", ")", "<operator>", "(", "<expression>", ")"]
+                          ],
+            "operator":   ["+", "-", "*", "/"],
+            "scale":      ["*"],
+            "number":     [
+                            ["<digit>"], 
+                            ["<digit>", "<digit0>"],
+                            ["<digit>", "<digit0>", "<digit0>"]
+                          ],
+            "digit":      ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "digit0":     ["0", "5"],
+            "exponent":   ["2", "3", "(1/2)", "(1/3)"],
+            "feature":    None
+        }
+
+        # Fill in features         
+        self.grammar["feature"] = [str(i) for i in np.arange(0, self.X.shape[1])]
+
+        self.max_num_tokens  = 10 # Sufficient to cover all possible tokens from grammar
+        self.max_num_derivations = self.max_num_tokens * self.max_num_tokens # TODO: Think about that
+
+        # Use differential evolution to find the optimal model
+        bounds = [(0, self.max_num_tokens)] * self.max_num_derivations
+        result = differential_evolution(self._evaluate_genotype, bounds)
+        
+        # Retrieve model
+        model = self._parse_grammar(result.x)
+        
+        # Compute the predicted values
+        pred = eval(model)
+
+        # Compute model string
+        model_str = model.replace("self.", "")
+        
+        # Compute the variables in use
+        viu          = np.zeros(self.X.shape[1], dtype=int)                    
+        match        = re.compile(r'self.X\[:,(\d+)\]') 
+        indices      = match.findall(model) 
+        indices      = [int(i) for i in indices] 
+        viu[indices] = 1
+
+        # Compute the nescience
+        nsc = self.nescience.nescience(None, subset=viu, predictions=pred, model_string=model_str)
+        
+        return (nsc, model, viu)
+
+
+    """
+    Given a genotype (a list of integers) compute the nescience of the
+    corresponding phenotype given the grammar.
+    
+    Return the nescience of the phenotype
+    """
+    def _evaluate_genotype(self, x):
+                
+        # Retrieve model
+        model = self._parse_grammar(x)
+                
+        # Compute the predicted values
+        try:
+            pred = eval(model)
+        except:
+            # In case of non-evaluable model, return a nescience of 1
+            return 1 
+                            
+        # Compute a simplified version of model string
+        model_str = model.replace("self.", "")
+                
+        # Compute the variables in use
+        viu          = np.zeros(self.X.shape[1], dtype=int)                    
+        match        = re.compile(r'self.X\[:,(\d+)\]') 
+        indices      = match.findall(model) 
+        indices      = [int(i) for i in indices] 
+        viu[indices] = 1
+        
+        # Compute the nescience
+        try:
+            nsc = self.nescience.nescience(None, subset=viu, predictions=pred, model_string=model_str)
+        except:
+            # In case of non-computable nesciencee, return a value of 1
+            return 1 
+                
+        return nsc
+
+
+    """
+    Given a genotype (a list of integers) compute the  corresponding phenotype
+    given the grammar.
+    
+    Return a string based phenotype
+    """
+    def _parse_grammar(self, x):
+        
+        x = [int(round(i)) for i in x]
+        
+        phenotype = ["<expression>"]
+        ind       = 0
+        modified  = True
+        
+        # Meanwhile there are no more non-terminal symbols
+        while modified:
+            
+            modified = False
+            new_phenotype = list()
+                        
+            for token in phenotype:
+                            
+                if token[0] == '<' and token[-1] == '>':
+                    
+                    token     = token[1:-1]
+                    new_token = self.grammar[token][x[ind] % len(self.grammar[token])]
+                                        
+                    if type(new_token) == str:
+                        new_token = list(new_token)
+                                            
+                    new_phenotype = new_phenotype + new_token
+                    modified = True
+                    ind = ind + 1
+                    ind = ind % self.max_num_derivations
+                                        
+                else:
+                                   
+                    # new_phenotype = new_phenotype + list(token)
+                    new_phenotype.append(token)
+                         
+            phenotype = new_phenotype
+                    
+        model = "".join(phenotype)
+
+        return model
+
+
 class AutoTimeSeries(BaseEstimator, RegressorMixin):
     
     # TODO: Class documentation
@@ -1915,7 +2342,8 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
         return None
 
     
-    def fit(self, ts):
+    # TODO: provide support to autofit
+    def fit(self, ts, auto=True):
         """
         Select the best model that explains the time series ts.
         
@@ -1923,6 +2351,7 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
         ----------            
         ts : array-like, shape (n_samples)
             The time series as numbers.
+        auto: compute automatically the optimal model
             
         Returns
         -------
@@ -1937,15 +2366,18 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
         nsc = 1
         self.model = None
         self.viu   = None
+
+        # Find optimal model
+        if auto:
         
-        for reg in self.models:
+            for reg in self.models:
             
-            (new_nsc, new_model, new_viu) = reg()
+                (new_nsc, new_model, new_viu) = reg()
             
-            if new_nsc < nsc:
-                nsc   = new_nsc
-                self.model = new_model
-                self.viu   = new_viu
+                if new_nsc < nsc: 
+                    nsc   = new_nsc
+                    self.model = new_model
+                    self.viu   = new_viu
         
         return self
 
@@ -2159,3 +2591,4 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
             viu       = new_viu
         
         return (nsc, model, viu)
+
