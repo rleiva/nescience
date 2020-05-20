@@ -7,7 +7,6 @@
 ``fastautoml`` requires:
 
  * scikit-learn (>= 0.22)
- * pandas       (>= 0.25)
 
 ## User Installation
 
