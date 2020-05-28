@@ -2062,10 +2062,10 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         tmp_hu = hu = [3]
 
         # Select the two most relevant features
-        viu[np.argmax(msd)] = 1        
-        msd[np.where(viu)] = -1
-        viu[np.argmax(msd)] = 1
-        msd[np.where(viu)] = -1
+        viu[np.argmax(msd)] =  1        
+        msd[np.where(viu)]  = -1
+        viu[np.argmax(msd)] =  1
+        msd[np.where(viu)]  = -1
         
         msdX = self.X[:,np.where(viu)[0]]
         tmp_nn = nn = MLPRegressor(hidden_layer_sizes = hu)
@@ -2145,13 +2145,13 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
                 new_nsc = self.nescience.nescience(new_nn, subset=viu, predictions=prd)
             
                 # Save data if nescience has been reduced                        
-            if new_nsc < tmp_nsc:                                
-                decreased = True
-                tmp_nn  = new_nn
-                tmp_nsc = new_nsc
-                tmp_msd = msd
-                tmp_viu = viu
-                tmp_hu  = new_hu
+                if new_nsc < tmp_nsc:                                
+                    decreased = True
+                    tmp_nn  = new_nn
+                    tmp_nsc = new_nsc
+                    tmp_msd = msd
+                    tmp_viu = viu
+                    tmp_hu  = new_hu
                 
             # Update neural network
             nn      = tmp_nn
@@ -2591,4 +2591,3 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
             viu       = new_viu
         
         return (nsc, model, viu)
-
