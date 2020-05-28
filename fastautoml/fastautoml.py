@@ -1594,15 +1594,6 @@ class Nescience(BaseEstimator, SelectorMixin):
 class AutoClassifier(BaseEstimator, ClassifierMixin):
     
     def __init__(self):
-
-        # Supported Classifiers
-        
-        self.classifiers = [
-            self.MultinomialNB,
-            self.DecisionTreeClassifier,
-            self.LinearSVC,
-            self.MLPClassifier
-        ]
         
         return None
 
@@ -1610,30 +1601,44 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
     def fit(self, X, y, auto=True):
         
         # TODO: document
+        
+        # Supported Classifiers
+        
+        self._classifiers = [
+            self._MultinomialNB,
+            self._DecisionTreeClassifier,
+            self._LinearSVC,
+            self._MLPClassifier
+        ]
 
-        self.X, self.y = check_X_y(X, y, dtype=None)
+        self._X, self._y = check_X_y(X, y, dtype="numeric")
 
-        self.nescience = Nescience()
-        self.nescience.fit(self.X, self.y)
+        self._nescience = Nescience()
+        self._nescience.fit(self._X, self._y)
         
         nsc = 1
-        self.model = None
-        self.viu   = None
+        self._model = None
+        self._viu   = None
+        self.classes_ = None
 
         # Find optimal model
         if auto:
         
-            for clf in self.classifiers:
+            for clf in self._classifiers:
             
                 # TODO: print classifier if verbose
+                
+                # If X contains negative values, MultinomialNB is skipped
+                if clf == self._MultinomialNB and not (self._X>=0).all():
+                    continue
                 
                 (new_nsc, new_model, new_viu) = clf()
                         
                 if new_nsc < nsc:
                     nsc   = new_nsc
-                    self.model = new_model
-                    self.viu   = new_viu
-        
+                    self._model = new_model
+                    self._viu   = new_viu
+        self.classes_ = self._model.classes_
         return self
 
 
@@ -1648,12 +1653,14 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         
         # TODO: Check that we have a model trained
         
-        if self.viu is None:
+        check_is_fitted(self, '_X')
+        
+        if self._viu is None:
             msdX = X
         else:
-            msdX = X[:,np.where(self.viu)[0]]
+            msdX = X[:,np.where(self._viu)[0]]
                 
-        return self.model.predict(msdX)
+        return self._model.predict(msdX)
 
 
     def predict_proba(self, X):
@@ -1667,13 +1674,15 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         """
         
         # TODO: Check that we have a model trained
+        
+        check_is_fitted(self, '_X')
 
-        if self.viu is None:
+        if self._viu is None:
             msdX = X
         else:
-            msdX = X[:,np.where(self.viu)[0]]
+            msdX = X[:,np.where(self._viu)[0]]
                     
-        return self.model.predict_proba(msdX)
+        return self._model.predict_proba(msdX)
 
 
     def score(self, X, y):
@@ -1688,39 +1697,41 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         
         # TODO: Check that we have a model trained
         
-        if self.viu is None:
+        check_is_fitted(self, '_X')
+        
+        if self._viu is None:
             msdX = X
         else:
-            msdX = X[:,np.where(self.viu)[0]]        
+            msdX = X[:,np.where(self._viu)[0]]        
         
-        return self.model.score(msdX, y)
+        return self._model.score(msdX, y)
 
 
-    def MultinomialNB(self):
+    def _MultinomialNB(self):
         
         # No hyperparameters to optimize
         
         model = MultinomialNB()
-        model.fit(self.X, self.y)
+        model.fit(self._X, self._y)
 
-        nsc = self.nescience.nescience(model)
+        nsc = self._nescience.nescience(model)
             
         return (nsc, model, None)
 
     
-    def LinearSVC(self):
+    def _LinearSVC(self):
         
         # No hyperparameters to optimize
                     
         model = LinearSVC(multi_class="crammer_singer")
-        model.fit(self.X, self.y)
+        model.fit(self._X, self._y)
 
-        nsc = self.nescience.nescience(model)
+        nsc = self._nescience.nescience(model)
             
         return (nsc, model, None)    
 
 
-    def DecisionTreeClassifier(self):
+    def _DecisionTreeClassifier(self):
         
         depth   = 3
         nsc     = 1
@@ -1731,22 +1742,22 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
             nsc = new_nsc
             
             model = DecisionTreeClassifier(max_depth=depth)
-            model.fit(self.X, self.y)
+            model.fit(self._X, self._y)
 
-            new_nsc = self.nescience.nescience(model)
+            new_nsc = self._nescience.nescience(model)
             
             depth = depth + 1
 
         return (nsc, model, None)
     
     
-    def MLPClassifier(self):
+    def _MLPClassifier(self):
         
         # Relevance of features
-        tmp_msd = msd = self.nescience.miscoding.miscoding_features()
+        tmp_msd = msd = self._nescience.miscoding.miscoding_features()
         
         # Variables in use
-        tmp_viu = viu = np.zeros(self.X.shape[1], dtype=np.int)
+        tmp_viu = viu = np.zeros(self._X.shape[1], dtype=np.int)
 
         # Create the initial neural network
         #  - two features
@@ -1761,11 +1772,11 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         viu[np.argmax(msd)] = 1
         msd[np.where(viu)] = -1
         
-        msdX = self.X[:,np.where(viu)[0]]
+        msdX = self._X[:,np.where(viu)[0]]
         tmp_nn = nn = MLPClassifier(hidden_layer_sizes = hu)
-        nn.fit(msdX, self.y)
+        nn.fit(msdX, self._y)
         prd  = nn.predict(msdX)
-        tmp_nsc = nsc = self.nescience.nescience(nn, subset=viu, predictions=prd)
+        tmp_nsc = nsc = self._nescience.nescience(nn, subset=viu, predictions=prd)
         
         # While the nescience decreases
         decreased = True        
@@ -1786,11 +1797,11 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
                 new_viu[np.argmax(new_msd)] = 1
                 new_msd[np.where(viu)] = -1
 
-                msdX    = self.X[:,np.where(new_viu)[0]]
+                msdX    = self._X[:,np.where(new_viu)[0]]
                 new_nn  = MLPClassifier(hidden_layer_sizes = hu)        
-                new_nn.fit(msdX, self.y)
+                new_nn.fit(msdX, self._y)
                 prd     = new_nn.predict(msdX)
-                new_nsc = self.nescience.nescience(new_nn, subset=new_viu, predictions=prd)
+                new_nsc = self._nescience.nescience(new_nn, subset=new_viu, predictions=prd)
             
                 # Save data if nescience has been reduced                        
                 if new_nsc < tmp_nsc:                                
@@ -1808,11 +1819,11 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
             new_hu = hu.copy()
             new_hu.append(3)
 
-            msdX    = self.X[:,np.where(viu)[0]]
+            msdX    = self._X[:,np.where(viu)[0]]
             new_nn  = MLPClassifier(hidden_layer_sizes = new_hu)
-            new_nn.fit(msdX, self.y)
+            new_nn.fit(msdX, self._y)
             prd     = new_nn.predict(msdX)
-            new_nsc = self.nescience.nescience(new_nn, subset=new_viu, predictions=prd)
+            new_nsc = self._nescience.nescience(new_nn, subset=new_viu, predictions=prd)
             
             # Save data if nescience has been reduced 
             if new_nsc < tmp_nsc:                                
@@ -1832,11 +1843,11 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
                 new_hu    = hu.copy()
                 new_hu[i] = new_hu[i] + 1            
 
-                msdX    = self.X[:,np.where(viu)[0]]
+                msdX    = self._X[:,np.where(viu)[0]]
                 new_nn  = MLPClassifier(hidden_layer_sizes = new_hu)
-                new_nn.fit(msdX, self.y)
+                new_nn.fit(msdX, self._y)
                 prd     = new_nn.predict(msdX)
-                new_nsc = self.nescience.nescience(new_nn, subset=viu, predictions=prd)
+                new_nsc = self._nescience.nescience(new_nn, subset=viu, predictions=prd)
             
                 # Save data if nescience has been reduced                        
             if new_nsc < tmp_nsc:                                
@@ -1864,15 +1875,6 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
     # TODO: Class documentation
 
     def __init__(self):
-
-        # Supported Regressors
-        
-        self.regressors = [
-            self.LinearRegression,
-            self.LinearSVR,
-            self.DecisionTreeRegressor,
-            self.MLPRegressor
-        ]
         
         return None
 
@@ -1895,21 +1897,30 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         -------
         self
         """
+        
+        # Supported Regressors
+        
+        self._regressors = [
+            self._LinearRegression,
+            self._LinearSVR,
+            self._DecisionTreeRegressor,
+            self._MLPRegressor
+        ]
 
-        self.X, self.y = check_X_y(X, y, dtype=None)
+        self._X, self._y = check_X_y(X, y, dtype="numeric")
 
-        self.nescience = Nescience()
-        self.nescience.fit(self.X, self.y)
+        self._nescience = Nescience()
+        self._nescience.fit(self._X, self._y)
         
         nsc = 1
-        self.model = None
-        self.viu   = None
+        self._model = None
+        self._viu   = None
         
         # Find automatically the optimal model
         
         if auto:
             
-            for reg in self.regressors:
+            for reg in self._regressors:
             
                 # TODO: Should be based on a verbose flag
                 print("Regressor: " + str(reg))
@@ -1918,8 +1929,8 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
             
                 if new_nsc < nsc:
                     nsc   = new_nsc
-                    self.model = new_model
-                    self.viu   = new_viu
+                    self._model = new_model
+                    self._viu   = new_viu
         
         return self
 
@@ -1935,12 +1946,14 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         
         # TODO: Check that we have a model trained
         
-        if self.viu is None:
+        check_is_fitted(self, '_X')
+        
+        if self._viu is None:
             msdX = X
         else:
-            msdX = X[:,np.where(self.viu)[0]]
+            msdX = X[:,np.where(self._viu)[0]]
                 
-        return self.model.predict(msdX)
+        return self._model.predict(msdX)
 
 
     def score(self, X, y):
@@ -1955,33 +1968,35 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         
         # TODO: Check that we have a model trained
         
-        if self.viu is None:
+        check_is_fitted(self, '_X')
+        
+        if self._viu is None:
             msdX = X
         else:
-            msdX = X[:,np.where(self.viu)[0]]        
+            msdX = X[:,np.where(self._viu)[0]]        
         
-        return self.model.score(msdX, y)
+        return self._model.score(msdX, y)
 
 
-    def LinearRegression(self):
+    def _LinearRegression(self):
         
         # Relevance of features
-        msd = self.nescience.miscoding.miscoding_features()
+        msd = self._nescience.miscoding.miscoding_features()
         
         # Variables in use
-        viu = np.zeros(self.X.shape[1], dtype=np.int)
+        viu = np.zeros(self._X.shape[1], dtype=np.int)
 
         # Select the the most relevant feature
         viu[np.argmax(msd)] = 1        
         msd[np.where(viu)] = -1
 
         # Evaluate the model        
-        msdX = self.X[:,np.where(viu)[0]]        
+        msdX = self._X[:,np.where(viu)[0]]        
         model = LinearRegression()
-        model.fit(msdX, self.y)
+        model.fit(msdX, self._y)
         
         prd  = model.predict(msdX)
-        nsc = self.nescience.nescience(model, subset=viu, predictions=prd)
+        nsc = self._nescience.nescience(model, subset=viu, predictions=prd)
         
         decreased = True
         while (decreased):
@@ -1996,12 +2011,12 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
             new_msd[np.where(new_viu)] = -1
 
             # Evaluate the model        
-            msdX = self.X[:,np.where(new_viu)[0]]        
+            msdX = self._X[:,np.where(new_viu)[0]]        
             new_model = LinearRegression()
-            new_model.fit(msdX, self.y)        
+            new_model.fit(msdX, self._y)        
             
             prd  = new_model.predict(msdX)
-            new_nsc = self.nescience.nescience(new_model, subset=new_viu, predictions=prd)
+            new_nsc = self._nescience.nescience(new_model, subset=new_viu, predictions=prd)
             
             # Save data if nescience has been reduced                        
             if new_nsc < nsc:                                
@@ -2014,19 +2029,19 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         return (nsc, model, viu)
 
 
-    def LinearSVR(self):
+    def _LinearSVR(self):
         # TODO: Optimize hyperparameters
                     
         # model = LinearSVR(multi_class="crammer_singer")
         model = LinearSVR()
-        model.fit(self.X, self.y)
+        model.fit(self._X, self._y)
 
-        nsc = self.nescience.nescience(model)
+        nsc = self._nescience.nescience(model)
             
         return (nsc, model, None)    
 
 
-    def DecisionTreeRegressor(self):
+    def _DecisionTreeRegressor(self):
         
         depth   = 3
         nsc     = 1
@@ -2037,22 +2052,22 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
             nsc = new_nsc
                         
             model = DecisionTreeRegressor(max_depth=depth)
-            model.fit(self.X, self.y)
+            model.fit(self._X, self._y)
 
-            new_nsc = self.nescience.nescience(model)
+            new_nsc = self._nescience.nescience(model)
             
             depth = depth + 1
 
         return (nsc, model, None)
 
 
-    def MLPRegressor(self):
+    def _MLPRegressor(self):
         
         # Relevance of features
-        tmp_msd = msd = self.nescience.miscoding.miscoding_features()
+        tmp_msd = msd = self._nescience.miscoding.miscoding_features()
         
         # Variables in use
-        tmp_viu = viu = np.zeros(self.X.shape[1], dtype=np.int)
+        tmp_viu = viu = np.zeros(self._X.shape[1], dtype=np.int)
 
         # Create the initial neural network
         #  - two features
@@ -2067,11 +2082,11 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         viu[np.argmax(msd)] = 1
         msd[np.where(viu)] = -1
         
-        msdX = self.X[:,np.where(viu)[0]]
+        msdX = self._X[:,np.where(viu)[0]]
         tmp_nn = nn = MLPRegressor(hidden_layer_sizes = hu)
-        nn.fit(msdX, self.y)
+        nn.fit(msdX, self._y)
         prd  = nn.predict(msdX)
-        tmp_nsc = nsc = self.nescience.nescience(nn, subset=viu, predictions=prd)
+        tmp_nsc = nsc = self._nescience.nescience(nn, subset=viu, predictions=prd)
         
         # While the nescience decreases
         decreased = True        
@@ -2092,11 +2107,11 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
                 new_viu[np.argmax(new_msd)] = 1
                 new_msd[np.where(viu)] = -1
 
-                msdX    = self.X[:,np.where(new_viu)[0]]
+                msdX    = self._X[:,np.where(new_viu)[0]]
                 new_nn  = MLPRegressor(hidden_layer_sizes = hu)        
-                new_nn.fit(msdX, self.y)
+                new_nn.fit(msdX, self._y)
                 prd     = new_nn.predict(msdX)
-                new_nsc = self.nescience.nescience(new_nn, subset=new_viu, predictions=prd)
+                new_nsc = self._nescience.nescience(new_nn, subset=new_viu, predictions=prd)
             
                 # Save data if nescience has been reduced                        
                 if new_nsc < tmp_nsc:                                
@@ -2114,11 +2129,11 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
             new_hu = hu.copy()
             new_hu.append(3)
 
-            msdX    = self.X[:,np.where(viu)[0]]
+            msdX    = self._X[:,np.where(viu)[0]]
             new_nn  = MLPRegressor(hidden_layer_sizes = new_hu)
-            new_nn.fit(msdX, self.y)
+            new_nn.fit(msdX, self._y)
             prd     = new_nn.predict(msdX)
-            new_nsc = self.nescience.nescience(new_nn, subset=new_viu, predictions=prd)
+            new_nsc = self._nescience.nescience(new_nn, subset=new_viu, predictions=prd)
             
             # Save data if nescience has been reduced 
             if new_nsc < tmp_nsc:                                
@@ -2138,11 +2153,11 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
                 new_hu    = hu.copy()
                 new_hu[i] = new_hu[i] + 1            
 
-                msdX    = self.X[:,np.where(viu)[0]]
+                msdX    = self._X[:,np.where(viu)[0]]
                 new_nn  = MLPRegressor(hidden_layer_sizes = new_hu)
-                new_nn.fit(msdX, self.y)
+                new_nn.fit(msdX, self._y)
                 prd     = new_nn.predict(msdX)
-                new_nsc = self.nescience.nescience(new_nn, subset=viu, predictions=prd)
+                new_nsc = self._nescience.nescience(new_nn, subset=viu, predictions=prd)
             
                 # Save data if nescience has been reduced                        
             if new_nsc < tmp_nsc:                                
@@ -2175,9 +2190,9 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         #
         # The grammar in use is:
         #
-        #     <expression> ::= self.X[:,<feature>] |
-        #                      <number> <scale> self.X[:,<feature>] |
-        #                      self.X[:,<feature>]) ** <exponent> |
+        #     <expression> ::= self._X[:,<feature>] |
+        #                      <number> <scale> self._X[:,<feature>] |
+        #                      self._X[:,<feature>]) ** <exponent> |
         #                      (<expression>) <operator> (<expression>)
         #                 
         #     <operator>   ::= + | - | * | /
@@ -2186,13 +2201,13 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         #     <digit>      ::= 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
         #     <digit0>     ::= 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
         #     <exponent>   ::= 2 | 3 | (1/2) | (1/3)
-        #     <feature>    ::= 1 .. self.X.shape[1]
+        #     <feature>    ::= 1 .. self._X.shape[1]
 
         self.grammar = {
             "expression": [
-                            ["self.X[:,", "<feature>", "]"],
-                            ["<number>", "<scale>", "self.X[:,", "<feature>", "]"],
-                            ["self.X[:,", "<feature>", "]**", "<exponent>"],
+                            ["self._X[:,", "<feature>", "]"],
+                            ["<number>", "<scale>", "self._X[:,", "<feature>", "]"],
+                            ["self._X[:,", "<feature>", "]**", "<exponent>"],
                             ["(", "<expression>", ")", "<operator>", "(", "<expression>", ")"]
                           ],
             "operator":   ["+", "-", "*", "/"],
@@ -2209,7 +2224,7 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         }
 
         # Fill in features         
-        self.grammar["feature"] = [str(i) for i in np.arange(0, self.X.shape[1])]
+        self.grammar["feature"] = [str(i) for i in np.arange(0, self._X.shape[1])]
 
         self.max_num_tokens  = 10 # Sufficient to cover all possible tokens from grammar
         self.max_num_derivations = self.max_num_tokens * self.max_num_tokens # TODO: Think about that
@@ -2228,14 +2243,14 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         model_str = model.replace("self.", "")
         
         # Compute the variables in use
-        viu          = np.zeros(self.X.shape[1], dtype=int)                    
-        match        = re.compile(r'self.X\[:,(\d+)\]') 
+        viu          = np.zeros(self._X.shape[1], dtype=int)                    
+        match        = re.compile(r'self._X\[:,(\d+)\]') 
         indices      = match.findall(model) 
         indices      = [int(i) for i in indices] 
         viu[indices] = 1
 
         # Compute the nescience
-        nsc = self.nescience.nescience(None, subset=viu, predictions=pred, model_string=model_str)
+        nsc = self._nescience.nescience(None, subset=viu, predictions=pred, model_string=model_str)
         
         return (nsc, model, viu)
 
@@ -2262,15 +2277,15 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         model_str = model.replace("self.", "")
                 
         # Compute the variables in use
-        viu          = np.zeros(self.X.shape[1], dtype=int)                    
-        match        = re.compile(r'self.X\[:,(\d+)\]') 
+        viu          = np.zeros(self._X.shape[1], dtype=int)                    
+        match        = re.compile(r'self._X\[:,(\d+)\]') 
         indices      = match.findall(model) 
         indices      = [int(i) for i in indices] 
         viu[indices] = 1
         
         # Compute the nescience
         try:
-            nsc = self.nescience.nescience(None, subset=viu, predictions=pred, model_string=model_str)
+            nsc = self._nescience.nescience(None, subset=viu, predictions=pred, model_string=model_str)
         except:
             # In case of non-computable nesciencee, return a value of 1
             return 1 
@@ -2330,14 +2345,6 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
     # TODO: Class documentation
 
     def __init__(self):
-
-        # Supported time series models
-        
-        self.models = [
-            self.AutoRegressive,
-            self.MovingAverage,
-            self.ExponentialSmoothing
-        ]
         
         return None
 
@@ -2358,26 +2365,34 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
         self
         """
 
-        self.X, self.y = self._whereIsTheX(ts)
+        # Supported time series models
+        
+        self._models = [
+            self._AutoRegressive,
+            self._MovingAverage,
+            self._ExponentialSmoothing
+        ]
 
-        self.nescience = Nescience()
-        self.nescience.fit(self.X, self.y)
+        self._X, self._y = self._whereIsTheX(ts)
+
+        self._nescience = Nescience()
+        self._nescience.fit(self._X, self._y)
         
         nsc = 1
-        self.model = None
-        self.viu   = None
+        self._model = None
+        self._viu   = None
 
         # Find optimal model
         if auto:
         
-            for reg in self.models:
+            for reg in self._models:
             
                 (new_nsc, new_model, new_viu) = reg()
             
                 if new_nsc < nsc: 
                     nsc   = new_nsc
-                    self.model = new_model
-                    self.viu   = new_viu
+                    self._model = new_model
+                    self._viu   = new_viu
         
         return self
 
@@ -2418,12 +2433,14 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
         
         # TODO: Check that we have a model trained
         
-        if self.viu is None:
+        check_is_fitted(self, '_X')
+        
+        if self._viu is None:
             msdX = X
         else:
-            msdX = X[:,np.where(self.viu)[0]]
+            msdX = X[:,np.where(self._viu)[0]]
                 
-        return self.model.predict(msdX)
+        return self._model.predict(msdX)
 
 
     def score(self, ts):
@@ -2441,36 +2458,38 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
         """
         
         # TODO: Check that we have a model trained
+        
+        check_is_fitted(self, '_X')
 
         X, y = self._whereIsTheX(ts)
         
-        if self.viu is None:
+        if self._viu is None:
             msdX = X
         else:
-            msdX = X[:,np.where(self.viu)[0]]        
+            msdX = X[:,np.where(self._viu)[0]]        
         
-        return self.model.score(msdX, y)
+        return self._model.score(msdX, y)
 
 
-    def AutoRegressive(self):
+    def _AutoRegressive(self):
         
         # Relevance of features
-        msd = self.nescience.miscoding.miscoding_features()
+        msd = self._nescience.miscoding.miscoding_features()
         
         # Variables in use
-        viu = np.zeros(self.X.shape[1], dtype=np.int)
+        viu = np.zeros(self._X.shape[1], dtype=np.int)
 
         # Select the the most relevant feature
         viu[np.argmax(msd)] = 1        
         msd[np.where(viu)] = -1
 
         # Evaluate the model        
-        msdX = self.X[:,np.where(viu)[0]]        
+        msdX = self._X[:,np.where(viu)[0]]        
         model = LinearRegression()
-        model.fit(msdX, self.y)
+        model.fit(msdX, self._y)
         
         prd  = model.predict(msdX)
-        nsc = self.nescience.nescience(model, subset=viu, predictions=prd)
+        nsc = self._nescience.nescience(model, subset=viu, predictions=prd)
         
         decreased = True
         while (decreased):
@@ -2485,12 +2504,12 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
             new_msd[np.where(new_viu)] = -1
 
             # Evaluate the model        
-            msdX = self.X[:,np.where(new_viu)[0]]        
+            msdX = self._X[:,np.where(new_viu)[0]]        
             new_model = LinearRegression()
-            new_model.fit(msdX, self.y)        
+            new_model.fit(msdX, self._y)        
             
             prd  = new_model.predict(msdX)
-            new_nsc = self.nescience.nescience(new_model, subset=new_viu, predictions=prd)
+            new_nsc = self._nescience.nescience(new_model, subset=new_viu, predictions=prd)
             
             # Save data if nescience has been reduced                        
             if new_nsc < nsc:                                
@@ -2503,24 +2522,24 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
         return (nsc, model, viu)
 
 
-    def MovingAverage(self):
+    def _MovingAverage(self):
         
         # Variables in use
-        viu = np.zeros(self.X.shape[1], dtype=np.int)
+        viu = np.zeros(self._X.shape[1], dtype=np.int)
 
         # Select the t-1 feature
         viu[-1] = 1        
 
         # Evaluate the model        
-        msdX = self.X[:,np.where(viu)[0]]        
+        msdX = self._X[:,np.where(viu)[0]]        
         model = LinearRegression()
         model.coef_ = np.array([1])
         model.intercept_ = np.array([0])
         
         prd  = model.predict(msdX)
-        nsc = self.nescience.nescience(model, subset=viu, predictions=prd)
+        nsc = self._nescience.nescience(model, subset=viu, predictions=prd)
         
-        for i in np.arange(2, self.X.shape[1] - 1):
+        for i in np.arange(2, self._X.shape[1] - 1):
             
             new_viu = viu.copy()
             
@@ -2528,13 +2547,13 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
             new_viu[-i] = 1        
 
             # Evaluate the model        
-            msdX = self.X[:,np.where(new_viu)[0]]
+            msdX = self._X[:,np.where(new_viu)[0]]
             new_model = LinearRegression()
             new_model.coef_ = np.repeat([1/i], i)
             new_model.intercept_ = np.array([0])
 
             prd  = new_model.predict(msdX)
-            new_nsc = self.nescience.nescience(new_model, subset=new_viu, predictions=prd)
+            new_nsc = self._nescience.nescience(new_model, subset=new_viu, predictions=prd)
                         
             # Save data if nescience has been reduced                        
             if new_nsc > nsc:
@@ -2547,26 +2566,26 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
         return (nsc, model, viu)
 
 
-    def ExponentialSmoothing(self):
+    def _ExponentialSmoothing(self):
         
         alpha = 0.2
         
         # Variables in use
-        viu = np.zeros(self.X.shape[1], dtype=np.int)
+        viu = np.zeros(self._X.shape[1], dtype=np.int)
 
         # Select the t-1 feature
         viu[-1] = 1        
 
         # Evaluate the model        
-        msdX = self.X[:,np.where(viu)[0]]        
+        msdX = self._X[:,np.where(viu)[0]]        
         model = LinearRegression()
         model.coef_ = np.array([1])
         model.intercept_ = np.array([0])
         
         prd  = model.predict(msdX)
-        nsc = self.nescience.nescience(model, subset=viu, predictions=prd)
+        nsc = self._nescience.nescience(model, subset=viu, predictions=prd)
         
-        for i in np.arange(2, self.X.shape[1] - 1):
+        for i in np.arange(2, self._X.shape[1] - 1):
             
             new_viu = viu.copy()
             
@@ -2574,13 +2593,13 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
             new_viu[-i] = 1        
 
             # Evaluate the model        
-            msdX = self.X[:,np.where(new_viu)[0]]
+            msdX = self._X[:,np.where(new_viu)[0]]
             new_model = LinearRegression()
             new_model.coef_ = np.repeat([(1-alpha)**i], i)
             new_model.intercept_ = np.array([0])
 
             prd  = new_model.predict(msdX)
-            new_nsc = self.nescience.nescience(new_model, subset=new_viu, predictions=prd)
+            new_nsc = self._nescience.nescience(new_model, subset=new_viu, predictions=prd)
                         
             # Save data if nescience has been reduced                        
             if new_nsc > nsc:
