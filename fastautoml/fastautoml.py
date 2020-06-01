@@ -1812,7 +1812,7 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
             new_nn  = MLPClassifier(hidden_layer_sizes = new_hu)
             new_nn.fit(msdX, self.y)
             prd     = new_nn.predict(msdX)
-            new_nsc = self.nescience.nescience(new_nn, subset=new_viu, predictions=prd)
+            new_nsc = self.nescience.nescience(new_nn, subset=viu, predictions=prd)
             
             # Save data if nescience has been reduced 
             if new_nsc < tmp_nsc:                                
@@ -2118,7 +2118,7 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
             new_nn  = MLPRegressor(hidden_layer_sizes = new_hu)
             new_nn.fit(msdX, self.y)
             prd     = new_nn.predict(msdX)
-            new_nsc = self.nescience.nescience(new_nn, subset=new_viu, predictions=prd)
+            new_nsc = self.nescience.nescience(new_nn, subset=viu, predictions=prd)
             
             # Save data if nescience has been reduced 
             if new_nsc < tmp_nsc:                                
