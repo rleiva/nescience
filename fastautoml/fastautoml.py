@@ -1839,13 +1839,13 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
                 new_nsc = self.nescience.nescience(new_nn, subset=viu, predictions=prd)
             
                 # Save data if nescience has been reduced                        
-            if new_nsc < tmp_nsc:                                
-                decreased = True
-                tmp_nn  = new_nn
-                tmp_nsc = new_nsc
-                tmp_msd = msd
-                tmp_viu = viu
-                tmp_hu  = new_hu
+                if new_nsc < tmp_nsc:                                
+                    decreased = True
+                    tmp_nn  = new_nn
+                    tmp_nsc = new_nsc
+                    tmp_msd = msd
+                    tmp_viu = viu
+                    tmp_hu  = new_hu
                 
             # Update neural network
             nn      = tmp_nn
