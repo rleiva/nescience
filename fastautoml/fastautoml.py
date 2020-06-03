@@ -1828,7 +1828,7 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
             new_nn.fit(msdX, self.y_)
             prd     = new_nn.predict(msdX)
             new_nsc = self.nescience_.nescience(new_nn, subset=viu, predictions=prd)
-            
+           
             # Save data if nescience has been reduced 
             if new_nsc < tmp_nsc:                                
                 decreased = True
