@@ -1620,6 +1620,7 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         self.nescience_ = Nescience()
         self.nescience_.fit(self.X_, self.y_)
         
+        # TODO: 
         # new y contains class indexes rather than labels in the range [0, n_classes]
         # self.classes_, self.y_ = np.unique(self.y_, return_inverse=True)
         self.classes_ = np.unique(self.y_)
