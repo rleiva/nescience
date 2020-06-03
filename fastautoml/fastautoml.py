@@ -2369,7 +2369,7 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
 
         # Supported time series models
         
-        self.model_s = [
+        self.models_ = [
             self.AutoRegressive,
             self.MovingAverage,
             self.ExponentialSmoothing
@@ -2387,7 +2387,7 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
         # Find optimal model
         if auto:
         
-            for reg in self.model_s:
+            for reg in self.models_:
             
                 (new_nsc, new_model, new_viu) = reg()
             
