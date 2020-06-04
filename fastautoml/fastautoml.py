@@ -16,11 +16,12 @@ import warnings
 import math
 import re
 
-from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
-from sklearn.feature_selection.base import SelectorMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin														
+														
 from sklearn.utils import check_X_y
 from sklearn.utils import check_array
 from sklearn.utils.validation import check_is_fitted
+from sklearn.utils.multiclass import check_classification_targets
 from sklearn.preprocessing import KBinsDiscretizer
 from sklearn.calibration import CalibratedClassifierCV
 
@@ -38,6 +39,7 @@ from sklearn.naive_bayes    import MultinomialNB
 from sklearn.tree           import DecisionTreeClassifier
 from sklearn.svm            import LinearSVC
 from sklearn.neural_network import MLPClassifier
+from sklearn.svm			import SVC
 
 # Supported regressors
 
@@ -213,7 +215,7 @@ def _optimal_code_length_3joint(x1, x2, y):
 # Class Miscoding
 # 
 
-class Miscoding(BaseEstimator, SelectorMixin):
+class Miscoding(BaseEstimator):
     """
     Given a dataset X = {x1, ..., xp} composed by p features, and a target
     variable y, the miscoding of the feature xj measures how difficult is to
@@ -258,7 +260,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
         self
         """
         
-        self.X, self.y = check_X_y(X, y, dtype=None)
+        self.X_, self.y_ = check_X_y(X, y, dtype="numeric")
         
         return self
 
@@ -281,7 +283,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
         Return a numpy array with the miscodings
         """
         
-        check_is_fitted(self, 'X')
+        check_is_fitted(self)
         
         if redundancy:
             miscoding = self._miscoding_features_joint(mode)
@@ -304,13 +306,13 @@ class Miscoding(BaseEstimator, SelectorMixin):
         Return the miscoding (float)
         """
 
-        check_is_fitted(self, 'X')
+        check_is_fitted(self)
         
         if isinstance(model, MultinomialNB):
             subset = self._MultinomialNB(model)
         elif isinstance(model, DecisionTreeClassifier):
             subset = self._DecisionTreeClassifier(model)
-        elif isinstance(model, LinearSVC):
+        elif isinstance(model, SVC) and model.get_params()['kernel']=='linear':
             subset = self._LinearSVC(model)
         elif isinstance(model, MLPClassifier):
             subset = self._MLPClassifier(model)
@@ -344,7 +346,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
         Return the miscoding (float)
         """
 
-        check_is_fitted(self, 'X')
+        check_is_fitted(self)
 
         partial = self.miscoding_features(mode='partial')
 
@@ -364,18 +366,18 @@ class Miscoding(BaseEstimator, SelectorMixin):
         Return the matrix with the miscodings (float)
         """
                 
-        miscoding = np.zeros([self.X.shape[1], self.X.shape[1]])
+        miscoding = np.zeros([self.X_.shape[1], self.X_.shape[1]])
 
         # Compute the regular matrix
 
-        for i in np.arange(self.X.shape[1]-1):
+        for i in np.arange(self.X_.shape[1]-1):
             
-            ldm_X1 = _optimal_code_length(self.X[:,i])
+            ldm_X1 = _optimal_code_length(self.X_[:,i])
 
-            for j in np.arange(i+1, self.X.shape[1]):
+            for j in np.arange(i+1, self.X_.shape[1]):
                  
-                ldm_X2   = _optimal_code_length(self.X[:,j])
-                ldm_X1X2 = _optimal_code_length_joint(self.X[:,i], self.X[:,j])
+                ldm_X2   = _optimal_code_length(self.X_[:,j])
+                ldm_X1X2 = _optimal_code_length_joint(self.X_[:,i], self.X_[:,j])
                        
                 mscd = ( ldm_X1X2 - min(ldm_X1, ldm_X2) ) / max(ldm_X1, ldm_X2)
                 
@@ -384,9 +386,9 @@ class Miscoding(BaseEstimator, SelectorMixin):
                 
         # Compute the normalized matrix
         
-        normalized = np.zeros([self.X.shape[1], self.X.shape[1]])
+        normalized = np.zeros([self.X_.shape[1], self.X_.shape[1]])
         
-        for i in np.arange(self.X.shape[1]):
+        for i in np.arange(self.X_.shape[1]):
 
             normalized[i,:] = 1 - miscoding[i,:]
             normalized[i,:] = normalized[i,:] / np.sum(normalized[i,:])
@@ -394,12 +396,12 @@ class Miscoding(BaseEstimator, SelectorMixin):
         return normalized
 
 
-    # TODO: do we have to support this?
-    def _get_support_mask(self):
-        
-        check_is_fitted(self, 'tcc_')
-        
-        return None
+									   
+								
+		
+									 
+		
+				   
 
 
     """
@@ -422,14 +424,14 @@ class Miscoding(BaseEstimator, SelectorMixin):
         
         # Discretize y and compute the encoded length
         
-        ldm_y = _optimal_code_length(self.y)
+        ldm_y = _optimal_code_length(self.y_)
 
-        for i in np.arange(self.X.shape[1]):
+        for i in np.arange(self.X_.shape[1]):
 
             # Discretize feature and compute lengths
             
-            ldm_X  = _optimal_code_length(self.X[:,i])
-            ldm_Xy = _optimal_code_length_joint(self.y, self.X[:,i])
+            ldm_X  = _optimal_code_length(self.X_[:,i])
+            ldm_Xy = _optimal_code_length_joint(self.y_, self.X_[:,i])
 
             # Compute miscoding
                        
@@ -476,7 +478,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
         # Compute non-redundant miscoding
         mscd = self._miscoding_features_single(mode='regular')
 
-        if self.X.shape[1] == 1:
+        if self.X_.shape[1] == 1:
             # With one single attribute we cannot compute the joint miscoding
             return mscd
 
@@ -484,17 +486,17 @@ class Miscoding(BaseEstimator, SelectorMixin):
         # Compute the joint miscoding matrix
         #         
                
-        red_matrix = np.ones([self.X.shape[1], self.X.shape[1]])
+        red_matrix = np.ones([self.X_.shape[1], self.X_.shape[1]])
 
-        ldm_y = _optimal_code_length(self.y)
-        new_y = _discretize_vector(self.y)
-        new_X = _discretize_matrix(self.X)
+        ldm_y = _optimal_code_length(self.y_)
+        new_y = _discretize_vector(self.y_)
+        new_X = _discretize_matrix(self.X_)
 
-        for i in np.arange(self.X.shape[1]-1):
+        for i in np.arange(self.X_.shape[1]-1):
             
             new_x1 = new_X[:,i]
 
-            for j in np.arange(i+1, self.X.shape[1]):
+            for j in np.arange(i+1, self.X_.shape[1]):
                 
                 new_x2 = new_X[:,j]
                 
@@ -520,8 +522,8 @@ class Miscoding(BaseEstimator, SelectorMixin):
         # Compute the joint miscoding 
         #
         
-        viu       = np.zeros(self.X.shape[1], dtype=np.int8)
-        miscoding = np.zeros(self.X.shape[1])
+        viu       = np.zeros(self.X_.shape[1], dtype=np.int8)
+        miscoding = np.zeros(self.X_.shape[1])
 
         # Select the first two variables with smaller joint miscoding
         
@@ -547,11 +549,11 @@ class Miscoding(BaseEstimator, SelectorMixin):
  
         # Iterate over the number of features
         
-        tmp = np.ones(self.X.shape[1]) * np.inf
+        tmp = np.ones(self.X_.shape[1]) * np.inf
         
-        for i in np.arange(2, self.X.shape[1]):
+        for i in np.arange(2, self.X_.shape[1]):
 
-            for j in np.arange(self.X.shape[1]):
+            for j in np.arange(self.X_.shape[1]):
             
                 if viu[j] == 1:
                     continue
@@ -561,7 +563,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
             viu[np.argmin(tmp)] = 1
             miscoding[np.argmin(tmp)] = np.min(tmp)
 
-            tmp = np.ones(self.X.shape[1]) * np.inf
+            tmp = np.ones(self.X_.shape[1]) * np.inf
 
         if mode == 'regular':
             return miscoding
@@ -589,7 +591,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
     def _MultinomialNB(self, estimator):
 
         # All the attributes are in use
-        attr_in_use = np.ones(self.X.shape[1], dtype=int)
+        attr_in_use = np.ones(self.X_.shape[1], dtype=int)
             
         return attr_in_use
     
@@ -601,7 +603,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
     """
     def _DecisionTreeClassifier(self, estimator):
 
-        attr_in_use = np.zeros(self.X.shape[1], dtype=int)
+        attr_in_use = np.zeros(self.X_.shape[1], dtype=int)
         features = set(estimator.tree_.feature[estimator.tree_.feature >= 0])
         for i in features:
             attr_in_use[i] = 1
@@ -617,7 +619,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
     def _LinearSVC(self, estimator):
 
         # All the attributes are in use
-        attr_in_use = np.ones(self.X.shape[1], dtype=int)
+        attr_in_use = np.ones(self.X_.shape[1], dtype=int)
             
         return attr_in_use
 
@@ -629,7 +631,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
     """
     def _MLPClassifier(self, estimator):
 
-        attr_in_use = np.ones(self.X.shape[1], dtype=int)
+        attr_in_use = np.ones(self.X_.shape[1], dtype=int)
             
         return attr_in_use
 
@@ -641,7 +643,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
     """
     def _LinearRegression(self, estimator):
         
-        attr_in_use = np.ones(self.X.shape[1], dtype=int)
+        attr_in_use = np.ones(self.X_.shape[1], dtype=int)
             
         return attr_in_use
 
@@ -653,7 +655,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
     """
     def _DecisionTreeRegressor(self, estimator):
         
-        attr_in_use = np.zeros(self.X.shape[1], dtype=int)
+        attr_in_use = np.zeros(self.X_.shape[1], dtype=int)
         features = set(estimator.tree_.feature[estimator.tree_.feature >= 0])
         for i in features:
             attr_in_use[i] = 1
@@ -668,7 +670,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
     """
     def _LinearSVR(self, estimator):
 
-        attr_in_use = np.ones(self.X.shape[1], dtype=int)
+        attr_in_use = np.ones(self.X_.shape[1], dtype=int)
             
         return attr_in_use
 
@@ -679,7 +681,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
     """
     def _MLPRegressor(self, estimator):
 
-        attr_in_use = np.ones(self.X.shape[1], dtype=int)
+        attr_in_use = np.ones(self.X_.shape[1], dtype=int)
             
         return attr_in_use
 
@@ -688,7 +690,7 @@ class Miscoding(BaseEstimator, SelectorMixin):
 # Class Inaccuracy
 #
         
-class Inaccuracy(BaseEstimator, SelectorMixin):
+class Inaccuracy(BaseEstimator):
     
     # TODO: Class documentation
     
@@ -713,9 +715,9 @@ class Inaccuracy(BaseEstimator, SelectorMixin):
         self
         """
         
-        self.X, self.y = check_X_y(X, y, dtype=None)
+        self.X_, self.y_ = check_X_y(X, y, dtype="numeric")
                 
-        self.len_y = _optimal_code_length(self.y)
+        self.len_y_ = _optimal_code_length(self.y_)
         
         return self
 
@@ -729,14 +731,14 @@ class Inaccuracy(BaseEstimator, SelectorMixin):
         Return the inaccuracy (float)
         """        
         
-        check_is_fitted(self, 'X')
+        check_is_fitted(self)
         
-        Pred = model.predict(self.X)
+        Pred = model.predict(self.X_)
         len_pred = _optimal_code_length(Pred)
         
-        len_joint = _optimal_code_length_joint(Pred, self.y)
+        len_joint = _optimal_code_length_joint(Pred, self.y_)
         
-        inacc = ( len_joint - min(self.len_y, len_pred) ) / max(self.len_y, len_pred)
+        inacc = ( len_joint - min(self.len_y_, len_pred) ) / max(self.len_y_, len_pred)
 
         return inacc
 
@@ -751,35 +753,37 @@ class Inaccuracy(BaseEstimator, SelectorMixin):
         Return the inaccuracy (float)
         """        
         
-        check_is_fitted(self, 'X')
+        check_is_fitted(self)
         
         len_pred = _optimal_code_length(predictions)
         
-        len_joint = _optimal_code_length_joint(predictions, self.y)
+        len_joint = _optimal_code_length_joint(predictions, self.y_)
         
-        inacc = ( len_joint - min(self.len_y, len_pred) ) / max(self.len_y, len_pred)
+        inacc = ( len_joint - min(self.len_y_, len_pred) ) / max(self.len_y_, len_pred)
 
         return inacc    
 
 
-    # TODO
-    def _get_support_mask(self):
-        
-        check_is_fitted(self, 'tcc_')
+		  
+								
+		
+									 
 
  
 #
 # Class Surfeit
 # 
     
-class Surfeit(BaseEstimator, SelectorMixin):
+class Surfeit(BaseEstimator):
     
-    def __init__(self):
+    def __init__(self, compressor="bz2"):
+	
+        self.compressor = compressor
         
         return None
     
 
-    def fit(self, X, y, compressor="bz2"):
+    def fit(self, X, y):
         """Initialize the surfeit class with dataset
         
         Parameters
@@ -795,11 +799,11 @@ class Surfeit(BaseEstimator, SelectorMixin):
         self
         """
 
-        self.compressor = compressor
+									
         
-        self.X, self.y = check_X_y(X, y, dtype=None)
+        self.X_, self.y_ = check_X_y(X, y, dtype="numeric")
                 
-        self.len_y = _optimal_code_length(self.y)
+        self.len_y_ = _optimal_code_length(self.y_)
         
         return self
     
@@ -821,12 +825,12 @@ class Surfeit(BaseEstimator, SelectorMixin):
         -------
         Redundancy (float) of the model
         """
-    
+		
         if isinstance(model, MultinomialNB):
             model_str = self._MultinomialNB(model)
         elif isinstance(model, DecisionTreeClassifier):
             model_str = self._DecisionTreeClassifier(model)
-        elif isinstance(model, LinearSVC):
+        elif isinstance(model, SVC) and model.get_params()['kernel']=='linear':
             model_str = self._LinearSVC(model)
         elif isinstance(model, MLPClassifier):
             model_str = self._MLPClassifier(model)
@@ -876,9 +880,9 @@ class Surfeit(BaseEstimator, SelectorMixin):
         if km > lm:
             return 1 - 3/4    # Experimental value
 
-        if self.len_y < km:
+        if self.len_y_ < km:
             # redundancy = 1 - l(C(y)) / l(m)
-            redundancy = 1 - self.len_y / lm
+            redundancy = 1 - self.len_y_ / lm
         else:
             # redundancy = 1 - l(m*) / l(m)
             redundancy = 1 - km / lm
@@ -912,13 +916,13 @@ class Surfeit(BaseEstimator, SelectorMixin):
         return redundancy
 
     
-    # TODO
-    def _get_support_mask(self):
-        
-        check_is_fitted(self, 'tcc_')
-        
-        return None
-    
+		  
+								
+		
+									 
+		
+				   
+	
 
     """
     Convert a MultinomialNB classifier into a string
@@ -1461,14 +1465,17 @@ class Surfeit(BaseEstimator, SelectorMixin):
         return string        
     
         
-class Nescience(BaseEstimator, SelectorMixin):
+class Nescience(BaseEstimator):
     
-    def __init__(self):
+    def __init__(self, compressor="bz2", method="Arithmetic"):
+	
+        self.compressor = compressor
+        self.method = method
         
         return None
     
     
-    def fit(self, X, y, method="Arithmetic", compressor="bz2"):
+    def fit(self, X, y):
         """
         Initialization of the class nescience
         
@@ -1489,19 +1496,19 @@ class Nescience(BaseEstimator, SelectorMixin):
                              values are: "bz2", "lzma" and "zlib".
           
         """
-        
-        self.method       = method
-        self.compressor   = compressor
+		
+								  
+									  
 
-        self.X, self.y = check_X_y(X, y, dtype=None)
+        X, y = check_X_y(X, y, dtype="numeric")
 
-        self.miscoding  = Miscoding()
-        self.inaccuracy = Inaccuracy()
-        self.surfeit    = Surfeit()
+        self.miscoding_  = Miscoding()
+        self.inaccuracy_ = Inaccuracy()
+        self.surfeit_    = Surfeit(self.compressor)
         
-        self.miscoding.fit(X, y)
-        self.inaccuracy.fit(X, y)
-        self.surfeit.fit(X, y, self.compressor)
+        self.miscoding_.fit(X, y)
+        self.inaccuracy_.fit(X, y)
+        self.surfeit_.fit(X, y)
         
         return self
 
@@ -1526,22 +1533,22 @@ class Nescience(BaseEstimator, SelectorMixin):
         Return the nescience (float)
         """
         
-        check_is_fitted(self, 'X')
+        check_is_fitted(self)
 
         if subset is None:
-            miscoding = self.miscoding.miscoding_model(model)
+            miscoding = self.miscoding_.miscoding_model(model)
         else:
-            miscoding = self.miscoding.miscoding_subset(subset)
+            miscoding = self.miscoding_.miscoding_subset(subset)
 
         if predictions is None:
-            inaccuracy = self.inaccuracy.inaccuracy_model(model)
+            inaccuracy = self.inaccuracy_.inaccuracy_model(model)
         else:
-            inaccuracy = self.inaccuracy.inaccuracy_predictions(predictions)
+            inaccuracy = self.inaccuracy_.inaccuracy_predictions(predictions)
             
         if model_string is None:
-            surfeit = self.surfeit.surfeit_model(model)
+            surfeit = self.surfeit_.surfeit_model(model)
         else:
-            surfeit = self.surfeit.surfeit_string(model_string)            
+            surfeit = self.surfeit_.surfeit_string(model_string)            
 
         # Avoid dividing by zero
         
@@ -1586,23 +1593,24 @@ class Nescience(BaseEstimator, SelectorMixin):
                 
         return nescience
 
-    
-    # TODO
-    def _get_support_mask(self):
-                
-        return None
+	
+		  
+								
+				
+				   
 
 
 class AutoClassifier(BaseEstimator, ClassifierMixin):
     
-    def __init__(self, random_state=None):
+    def __init__(self, auto=True, random_state=None):
         
         self.random_state = random_state
+        self.auto = auto
         
         return None
 
     
-    def fit(self, X, y, auto=True):
+    def fit(self, X, y):
         
         # TODO: document
         
@@ -1616,21 +1624,22 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         ]
 
         self.X_, self.y_ = check_X_y(X, y, dtype="numeric")
+        check_classification_targets(self.y_)
 
         self.nescience_ = Nescience()
         self.nescience_.fit(self.X_, self.y_)
         
-        # TODO: 
+				
         # new y contains class indexes rather than labels in the range [0, n_classes]
-        # self.classes_, self.y_ = np.unique(self.y_, return_inverse=True)
-        self.classes_ = np.unique(self.y_)
+        self.classes_, self.y_ = np.unique(self.y_, return_inverse=True)
+										  
         
         nsc = 1
         self.model_ = None
         self.viu_   = None
         
         # Find optimal model
-        if auto:
+        if self.auto:
         
             for clf in self.classifiers_:
             
@@ -1665,8 +1674,8 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
             msdX = X
         else:
             msdX = X[:,np.where(self.viu_)[0]]
-                
-        return self.model_.predict(msdX)
+
+        return self.classes_[self.model_.predict(msdX)]
 
 
     # def predict_proba(self, X):
@@ -1686,7 +1695,7 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
             # msdX = X
         # else:
             # msdX = X[:,np.where(self.viu_)[0]]
-                    
+					
         # return self.model_.predict_proba(msdX)
 
 
@@ -1709,6 +1718,15 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
             msdX = X[:,np.where(self.viu_)[0]]        
         
         return self.model_.score(msdX, y)
+	
+	
+    def get_model(self):
+        """
+        Get access to the private attribute model
+		
+        Return self.model_
+        """
+        return self.model_
 
 
     def MultinomialNB(self):
@@ -1727,7 +1745,7 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         
         # No hyperparameters to optimize
         
-        model = LinearSVC(multi_class="crammer_singer", random_state=self.random_state)
+        model = SVC(kernel='linear', probability=True, random_state=self.random_state)
         model.fit(self.X_, self.y_)
 
         nsc = self.nescience_.nescience(model)
@@ -1758,7 +1776,7 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
     def MLPClassifier(self):
         
         # Relevance of features
-        tmp_msd = msd = self.nescience_.miscoding.miscoding_features()
+        tmp_msd = msd = self.nescience_.miscoding_.miscoding_features()
         
         # Variables in use
         tmp_viu = viu = np.zeros(self.X_.shape[1], dtype=np.int)
@@ -1828,7 +1846,7 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
             new_nn.fit(msdX, self.y_)
             prd     = new_nn.predict(msdX)
             new_nsc = self.nescience_.nescience(new_nn, subset=viu, predictions=prd)
-           
+            
             # Save data if nescience has been reduced 
             if new_nsc < tmp_nsc:                                
                 decreased = True
@@ -1878,14 +1896,15 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
     
     # TODO: Class documentation
 
-    def __init__(self, random_state=None):
+    def __init__(self, auto=True, random_state=None):
         
         self.random_state = random_state
+        self.auto = auto
         
         return None
 
     
-    def fit(self, X, y, auto=True):
+    def fit(self, X, y):
         """
         Select the best model that explains y given X.
         
@@ -1924,7 +1943,7 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         
         # Find automatically the optimal model
         
-        if auto:
+        if self.auto:
             
             for reg in self.regressors_:
             
@@ -1981,10 +2000,20 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         return self.model_.score(msdX, y)
 
 
+		
+    def get_model(self):
+        """
+        Get access to the private attribute model
+		
+        Return self.model_
+        """
+        return self.model_
+		
+		
     def LinearRegression(self):
         
         # Relevance of features
-        msd = self.nescience_.miscoding.miscoding_features()
+        msd = self.nescience_.miscoding_.miscoding_features()
         
         # Variables in use
         viu = np.zeros(self.X_.shape[1], dtype=np.int)
@@ -2067,7 +2096,7 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
     def MLPRegressor(self):
         
         # Relevance of features
-        tmp_msd = msd = self.nescience_.miscoding.miscoding_features()
+        tmp_msd = msd = self.nescience_.miscoding_.miscoding_features()
         
         # Variables in use
         tmp_viu = viu = np.zeros(self.X_.shape[1], dtype=np.int)
@@ -2347,13 +2376,15 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
     
     # TODO: Class documentation
 
-    def __init__(self):
+    def __init__(self, auto=True):
         
+        self.auto = auto
+		
         return None
 
     
     # TODO: provide support to autofit
-    def fit(self, ts, auto=True):
+    def fit(self, ts):
         """
         Select the best model that explains the time series ts.
         
@@ -2386,7 +2417,7 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
         self.viu_   = None
 
         # Find optimal model
-        if auto:
+        if self.auto:
         
             for reg in self.models_:
             
@@ -2468,8 +2499,17 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
             msdX = X[:,np.where(self.viu_)[0]]        
         
         return self.model_.score(msdX, y)
+		
+		
+    def get_model(self):
+        """
+        Get access to the private attribute model
+		
+        Return self.model_
+        """
+        return self.model_
 
-
+		
     def AutoRegressive(self):
         
         # Relevance of features
