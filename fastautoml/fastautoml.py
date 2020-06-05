@@ -307,12 +307,12 @@ class Miscoding(BaseEstimator):
         """
 
         check_is_fitted(self)
-        
+
         if isinstance(model, MultinomialNB):
             subset = self._MultinomialNB(model)
         elif isinstance(model, DecisionTreeClassifier):
             subset = self._DecisionTreeClassifier(model)
-        elif isinstance(model, SVC) and model.get_params()['kernel']=='linear':
+        elif isinstance(model, CalibratedClassifierCV) and model.get_params()['base_estimator'].get_params()['kernel']=='linear':
             subset = self._LinearSVC(model)
         elif isinstance(model, MLPClassifier):
             subset = self._MLPClassifier(model)
@@ -825,12 +825,12 @@ class Surfeit(BaseEstimator):
         -------
         Redundancy (float) of the model
         """
-		
+
         if isinstance(model, MultinomialNB):
             model_str = self._MultinomialNB(model)
         elif isinstance(model, DecisionTreeClassifier):
             model_str = self._DecisionTreeClassifier(model)
-        elif isinstance(model, SVC) and model.get_params()['kernel']=='linear':
+        elif isinstance(model, CalibratedClassifierCV) and model.get_params()['base_estimator'].get_params()['kernel']=='linear':
             model_str = self._LinearSVC(model)
         elif isinstance(model, MLPClassifier):
             model_str = self._MLPClassifier(model)
@@ -985,11 +985,14 @@ class Surfeit(BaseEstimator):
         # Discretize similarities
         #
         
-        M = estimator.coef_
+		# CalibratedClassifierCV does a 5-fold cross-validation
+		# Compute the average of coef_ attribute of the 5 classifiers
+        M = np.average([clf.base_estimator.coef_ for clf in estimator.calibrated_classifiers_],axis=0)
+        shape = M.shape
         M = M.flatten()
         M = _discretize_vector(M)
         M = np.array(M)
-        M = M.reshape(estimator.coef_.shape)
+        M = M.reshape(shape)
         
         #
         # Create the model
@@ -1678,25 +1681,25 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         return self.classes_[self.model_.predict(msdX)]
 
 
-    # def predict_proba(self, X):
-        # """
-        # Predict the probability of being in a class given a dataset
+    def predict_proba(self, X):
+        """
+        Predict the probability of being in a class given a dataset
     
-          # * X = list([[x11, x12, x13, ...], ..., [xn1, xn2, ..., xnm]])
+          * X = list([[x11, x12, x13, ...], ..., [xn1, xn2, ..., xnm]])
       
-        # Return an array of probabilities. The order of the list match the order
-        # the internal attribute classes_
-        # """
+        Return an array of probabilities. The order of the list match the order
+        the internal attribute classes_
+        """
         
-        # check_is_fitted(self)
-        # X = check_array(X)
+        check_is_fitted(self)
+        X = check_array(X)
 
-        # if self.viu_ is None:
-            # msdX = X
-        # else:
-            # msdX = X[:,np.where(self.viu_)[0]]
+        if self.viu_ is None:
+            msdX = X
+        else:
+            msdX = X[:,np.where(self.viu_)[0]]
 					
-        # return self.model_.predict_proba(msdX)
+        return self.model_.predict_proba(msdX)
 
 
     def score(self, X, y):
@@ -1745,7 +1748,7 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         
         # No hyperparameters to optimize
         
-        model = SVC(kernel='linear', probability=True, random_state=self.random_state)
+        model = CalibratedClassifierCV(base_estimator=SVC(kernel='linear', probability=True, random_state=self.random_state))
         model.fit(self.X_, self.y_)
 
         nsc = self.nescience_.nescience(model)
