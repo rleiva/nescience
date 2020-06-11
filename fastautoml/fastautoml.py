@@ -1757,24 +1757,34 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
 
 
     def DecisionTreeClassifier(self):
-        
-        depth   = 3
-        nsc     = 1
-        new_nsc = 0.99
-        
-        while new_nsc < nsc:
 
-            nsc = new_nsc
-            
-            model = DecisionTreeClassifier(max_depth=depth, random_state=self.random_state)
-            model.fit(self.X_, self.y_)
+        clf  = DecisionTreeClassifier()
+        path = clf.cost_complexity_pruning_path(self.X_, self.y_)
 
-            new_nsc = self.nescience_.nescience(model)
-            
-            depth = depth + 1
+        previous_nodes = -1
+        best_nsc       = 1
+        best_model     = None
 
-        return (nsc, model, None)
+        # For every possible prunning point in reverse order
+        for ccp_alpha in reversed(path.ccp_alphas):
     
+            model = DecisionTreeClassifier(ccp_alpha=ccp_alpha, random_state=self.random_state)
+            model.fit(self.X_, self.y_)
+    
+            # Skip if nothing has changed
+            if model.tree_.node_count == previous_nodes:
+                continue
+    
+            previous_nodes = model.tree_.node_count
+    
+            new_nsc = self.nescience_.nescience(model)
+    
+            if new_nsc < best_nsc:
+                best_nsc   = new_nsc
+                best_model = model
+
+        return (best_nsc, best_model, None)
+
     
     def MLPClassifier(self):
         
@@ -2078,22 +2088,32 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
 
     def DecisionTreeRegressor(self):
         
-        depth   = 3
-        nsc     = 1
-        new_nsc = 0.99
-        
-        while new_nsc < nsc:
+        clf  = DecisionTreeRegressor(random_state=self.random_state)
+        path = clf.cost_complexity_pruning_path(self.X_, self.y_)
 
-            nsc = new_nsc
-                        
-            model = DecisionTreeRegressor(max_depth=depth, random_state=self.random_state)
+        previous_nodes = -1
+        best_nsc       = 1
+        best_model     = None
+
+        # For every possible prunning point in reverse order
+        for ccp_alpha in reversed(path.ccp_alphas):
+    
+            model = DecisionTreeRegressor(ccp_alpha=ccp_alpha, random_state=self.random_state)
             model.fit(self.X_, self.y_)
-
+    
+            # Skip if nothing has changed
+            if model.tree_.node_count == previous_nodes:
+                continue
+    
+            previous_nodes = model.tree_.node_count
+    
             new_nsc = self.nescience_.nescience(model)
-            
-            depth = depth + 1
-
-        return (nsc, model, None)
+    
+            if new_nsc < best_nsc:
+                best_nsc   = new_nsc
+                best_model = model
+    
+        return (best_nsc, best_model, None)       
 
 
     def MLPRegressor(self):
