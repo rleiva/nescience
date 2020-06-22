@@ -222,7 +222,8 @@ class Miscoding(BaseEstimator):
     reconstruct y given xj, and the other way around. We are not only
     interested in to identify how much information xj contains about y, but
     also if xj contains additional information that is not related
-    to y (which is a bad thing).
+    to y (which is a bad thing). Miscoding also takes into account that
+    feature xi might be redundant with respect to feature xj.
 
     The fastautoml.Miscoding class allow us to compute the relevance of
     features, the quality of a dataset, and select the optimal subset of
@@ -237,7 +238,19 @@ class Miscoding(BaseEstimator):
 
     """
     
-    def __init__(self):
+    def __init__(self, redundancy=True):
+        """
+        Initialization of the class Miscoding
+        
+        Parameters
+        ----------
+        redundancy: if "True" takes into account the redundancy between features
+                    to compute the miscoding, if "False" only the miscoding with
+                    respect to the target variable is computed.
+          
+        """        
+
+        self.redundancy = redundancy
         
         return None
     
@@ -261,11 +274,21 @@ class Miscoding(BaseEstimator):
         """
         
         self.X_, self.y_ = check_X_y(X, y, dtype="numeric")
+
+        if self.redundancy:
+            self.regular_ = self._miscoding_features_joint()
+        else:
+            self.regular_ = self._miscoding_features_single()
+
+        self.adjusted_ = 1 - self.regular_
+        self.adjusted_ = self.adjusted_ / np.sum(self.adjusted_)
+
+        self.partial_ = self.adjusted_ - self.regular_ / np.sum(self.regular_)
         
         return self
 
 
-    def miscoding_features(self, mode='adjusted', redundancy=True):
+    def miscoding_features(self, mode='adjusted'):
         """
         Return the miscoding of the target given the features
 
@@ -275,8 +298,6 @@ class Miscoding(BaseEstimator):
                 the true miscoding, 'normalized' for normalized values that
                 sum one, and 'partial' with positive and negative
                 contritutions to dataset miscoding.
-        redundancy: if True avoid redundant features during the
-                    computation of miscoding
             
         Returns
         -------
@@ -285,12 +306,17 @@ class Miscoding(BaseEstimator):
         
         check_is_fitted(self)
         
-        if redundancy:
-            miscoding = self._miscoding_features_joint(mode)
-        else:
-            miscoding = self._miscoding_features_single(mode)
-            
-        return miscoding
+        if mode == 'regular':
+            return self.regular_
+        elif mode == 'adjusted':
+            return self.adjusted_
+        elif mode == 'partial':
+            return self.partial_
+
+        valid_mode = ('regular', 'adjusted', 'partial')
+        raise ValueError("Valid options for 'mode' are {}. "
+                         "Got mode={!r} instead."
+                         .format(valid_mode, mode)) 
             
 
     def miscoding_model(self, model):
@@ -348,10 +374,15 @@ class Miscoding(BaseEstimator):
 
         check_is_fitted(self)
 
-        partial = self.miscoding_features(mode='partial')
-
-        miscoding = np.dot(subset, partial)
-        miscoding = 1 - miscoding
+        # Avoid miscoding greater than 1
+        # TODO: Think!        
+        top_mscd = 1 + np.sum(self.partial_[self.partial_ < 0])
+        miscoding = top_mscd - np.dot(subset, self.partial_)
+                
+        # Avoid miscoding smaller than zero
+        # TODO: Think!
+        if miscoding < 0:
+            miscoding = 0
 
         return miscoding
 
@@ -405,20 +436,13 @@ class Miscoding(BaseEstimator):
 
 
     """
-    Return the miscoding of the target given the features
-
-    Parameters
-    ----------
-    mode  : the mode of miscoding, possible values are 'regular' for
-            the true miscoding, 'normalized' for normalized values that
-            sum one, and 'partial' with positive and negative
-            contritutions to dataset miscoding.
+    Return the regular miscoding of the target given the features
             
     Returns
     -------
-    Return a numpy array with the miscodings
+    Return a numpy array with the regular miscodings
     """
-    def _miscoding_features_single(self, mode='adjusted'):
+    def _miscoding_features_single(self):
                  
         miscoding = list()
         
@@ -441,42 +465,20 @@ class Miscoding(BaseEstimator):
                 
         miscoding = np.array(miscoding)
 
-        if mode == 'regular':
-            return miscoding
-        elif mode == 'adjusted':
-            adjusted = 1 - miscoding
-            adjusted = adjusted / np.sum(adjusted)
-            return adjusted
-        elif mode == 'partial':
-            adjusted = 1 - miscoding
-            adjusted = adjusted / np.sum(adjusted)
-            partial  = adjusted - miscoding / np.sum(miscoding)
-            return partial
-
-        valid_mode = ('regular', 'adjusted', 'partial')
-        raise ValueError("Valid options for 'mode' are {}. "
-                         "Got mode={!r} instead."
-                         .format(valid_mode, mode))        
+        return miscoding
 
 
     """
-    Return the joint redundancy of the target given pairs features
-
-    Parameters
-    ----------
-    mode  : the mode of miscoding, possible values are 'regular' for
-            the joint redundancy, 'normalized' for normalized values that
-            sum one, and 'partial' with positive and negative
-            contritutions to dataset joint redundancy.
+    Return the joint regular miscoding of the target given pairs features
             
     Returns
     -------
-    Return a numpy array with the miscodings
+    Return a numpy array with the regular miscodings
     """
-    def _miscoding_features_joint(self, mode='adjusted'):
+    def _miscoding_features_joint(self):
 
         # Compute non-redundant miscoding
-        mscd = self._miscoding_features_single(mode='regular')
+        mscd = self._miscoding_features_single()
 
         if self.X_.shape[1] == 1:
             # With one single attribute we cannot compute the joint miscoding
@@ -565,22 +567,7 @@ class Miscoding(BaseEstimator):
 
             tmp = np.ones(self.X_.shape[1]) * np.inf
 
-        if mode == 'regular':
-            return miscoding
-        elif mode == 'adjusted':
-            adjusted = 1 - miscoding
-            adjusted = adjusted / np.sum(adjusted)
-            return adjusted
-        elif mode == 'partial':
-            adjusted = 1 - miscoding
-            adjusted = adjusted / np.sum(adjusted)
-            partial  = adjusted - miscoding / np.sum(miscoding)
-            return partial
-
-        valid_mode = ('regular', 'adjusted', 'partial')
-        raise ValueError("Valid options for 'mode' are {}. "
-                         "Got mode={!r} instead."
-                         .format(valid_mode, mode))
+        return miscoding
 
 
     """
