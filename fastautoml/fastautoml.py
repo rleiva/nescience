@@ -510,7 +510,6 @@ class Miscoding(BaseEstimator):
                 red_matrix[i, j] = tmp
                 red_matrix[j, i] = tmp
          
-               
         #
         # Compute the joint miscoding 
         #
@@ -522,6 +521,10 @@ class Miscoding(BaseEstimator):
         
         loc1, loc2 = np.unravel_index(np.argmin(red_matrix, axis=None), red_matrix.shape)
         jmscd1 = jmscd2 = red_matrix[loc1, loc2]
+
+        # Avoid the case of selecting a member of the main diagonal
+        if loc1 == loc2:
+            loc2 = loc2 + 1
         
         viu[loc1] = 1
         viu[loc2] = 1
@@ -533,12 +536,11 @@ class Miscoding(BaseEstimator):
         
         if tmp1 < tmp2:
             jmscd1 = jmscd1 * tmp1 / tmp2
-            miscoding[loc1] = jmscd1
-            miscoding[loc2] = jmscd2
-        else:
+        elif tmp1 > tmp2:
             jmscd2 = jmscd2 * tmp2 / tmp1
-            miscoding[loc1] = jmscd1
-            miscoding[loc2] = jmscd2
+        
+        miscoding[loc1] = jmscd1
+        miscoding[loc2] = jmscd2
  
         # Iterate over the number of features
         
