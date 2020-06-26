@@ -63,14 +63,15 @@ Discretize the variable x if needed
     
 Parameters
 ----------
-x :     array-like, shape (n_samples)
-        The variable to be discretized, if needed.
+x :       array-like, shape (n_samples)
+          The variable to be discretized, if needed.
+strategy: The strategy to assigne the points to the intervals
        
 Returns
 -------
 A new discretized vector.
 """
-def _discretize_vector(x):
+def _discretize_vector(x, strategy="quantile"):
 
     new_x = x.copy()
 
@@ -91,7 +92,7 @@ def _discretize_vector(x):
             
             warnings.simplefilter("ignore")
 
-            est = KBinsDiscretizer(n_bins=n_bins, encode='ordinal', strategy='kmeans')
+            est = KBinsDiscretizer(n_bins=n_bins, encode='ordinal', strategy=strategy)
             est.fit(new_x)
             new_x = est.transform(new_x)
             
@@ -295,9 +296,9 @@ class Miscoding(BaseEstimator):
         Parameters
         ----------
         mode  : the mode of miscoding, possible values are 'regular' for
-                the true miscoding, 'normalized' for normalized values that
-                sum one, and 'partial' with positive and negative
-                contritutions to dataset miscoding.
+                the true miscoding, 'adjusted' for the normalized inverted
+                values, and 'partial' with positive and negative
+                contributions to dataset miscoding.
             
         Returns
         -------
@@ -317,7 +318,7 @@ class Miscoding(BaseEstimator):
         raise ValueError("Valid options for 'mode' are {}. "
                          "Got mode={!r} instead."
                          .format(valid_mode, mode)) 
-            
+
 
     def miscoding_model(self, model):
         """
@@ -360,7 +361,7 @@ class Miscoding(BaseEstimator):
 
     def miscoding_subset(self, subset):
         """
-        Compute the partial joint miscoding of a subset of the dataset
+        Compute the partial joint miscoding of a subset of the features
         
         Parameters
         ----------
@@ -375,12 +376,10 @@ class Miscoding(BaseEstimator):
         check_is_fitted(self)
 
         # Avoid miscoding greater than 1
-        # TODO: Think!        
         top_mscd = 1 + np.sum(self.partial_[self.partial_ < 0])
         miscoding = top_mscd - np.dot(subset, self.partial_)
                 
         # Avoid miscoding smaller than zero
-        # TODO: Think!
         if miscoding < 0:
             miscoding = 0
 
@@ -425,14 +424,6 @@ class Miscoding(BaseEstimator):
             normalized[i,:] = normalized[i,:] / np.sum(normalized[i,:])
 
         return normalized
-
-
-									   
-								
-		
-									 
-		
-				   
 
 
     """
