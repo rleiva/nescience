@@ -47,7 +47,7 @@ print("Score:", model.score(X_test, y_test))
 
 This project is licensed under the 3-Clause BSD license - see the [LICENSE.md](LICENSE.md) file for details.
 
-## Aknowledgements
+## Funding
 
-This project has received funding from the European Union's Horizon 2020 research and innovation programme under grant agreement No 732667 [RECAP](https://recap-project.eu/)
+This project has received funding from the [IMDEA Networks Institute](https://www.networks.imdea.org/) and from the European Union's Horizon 2020 research and innovation programme under grant agreement No 732667 [RECAP](https://recap-project.eu/).
 
