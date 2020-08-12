@@ -2,6 +2,7 @@
 
  * Antonio Fernandez <antonio.fernandez@imdea.org>
  * Vincenzo Mancuso <vincenzo.mancuso@imdea.org>
+ * Simon Bihoreau <simon.bihoreau@ensta-paris.fr>
 
 # Past Contributors
 
