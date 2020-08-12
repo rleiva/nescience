@@ -671,8 +671,26 @@ class Miscoding(BaseEstimator):
 #
         
 class Inaccuracy(BaseEstimator):
-    
-    # TODO: Class documentation
+    """
+    The fastautoml.Inaccuracy class allow us to compute the quality of
+    the predictions made by a trained model.
+
+    Example of usage:
+        
+        from fastautoml.fastautoml import Inaccuracy
+        from sklearn.tree import DecisionTreeClassifier
+        from sklearn.datasets import load_digits
+
+        X, y = load_digits(return_X_y=True)
+
+        tree = DecisionTreeClassifier(max_depth=i, random_state=42)
+        tree.fit(X, y)
+
+        inacc = Inaccuracy()
+        inacc.fit(X, y)
+        inacc.inaccuracy_model(tree)
+
+    """    
     
     def __init__(self):
         
@@ -680,22 +698,26 @@ class Inaccuracy(BaseEstimator):
     
     
     def fit(self, X, y):
-        """Initialize the inaccuracy class with dataset
+        """Initialize the inaccuracy class with a dataset
         
         Parameters
         ----------
         X : array-like, shape (n_samples, n_features)
             Sample vectors from which models have been trained.
+            Continuous and categorical variables are supported
+            if the trained model support them.
             
         y : array-like, shape (n_samples)
-            The target values (class labels) as integers or strings.
+            The target values as integers or strings.
+            Continuous and categorical variables are supported
+            if the trained model support them.
             
         Returns
         -------
         self
         """
         
-        self.X_, self.y_ = check_X_y(X, y, dtype="numeric")
+        self.X_, self.y_ = check_X_y(X, y, dtype=None)
                 
         self.len_y_ = _optimal_code_length(self.y_)
         
@@ -706,7 +728,7 @@ class Inaccuracy(BaseEstimator):
         """
         Compute the inaccuracy of a model
         
-        model : trained model with a predict() method
+        model : a trained model with a predict() method
          
         Return the inaccuracy (float)
         """        
