@@ -6,8 +6,7 @@ with the minimum nescience principle
 @mail:      rgarcialeiva@gmail.com
 @web:       http://www.mathematicsunknown.com/
 @copyright: GNU GPLv3
-@version:   0.7
-
+@version:   0.8
 """
 
 import numpy  as np
@@ -18,12 +17,14 @@ import re
 
 from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin														
 														
-from sklearn.utils import check_X_y
-from sklearn.utils import check_array
+from sklearn.utils            import check_X_y
+from sklearn.utils            import check_array
 from sklearn.utils.validation import check_is_fitted
 from sklearn.utils.multiclass import check_classification_targets
-from sklearn.preprocessing import KBinsDiscretizer
-from sklearn.calibration import CalibratedClassifierCV
+from sklearn.preprocessing    import KBinsDiscretizer
+from sklearn.preprocessing    import LabelEncoder
+from sklearn.calibration      import CalibratedClassifierCV
+from sklearn.cluster          import KMeans
 
 from scipy.optimize import differential_evolution
 
@@ -59,163 +60,177 @@ from sklearn.neural_network import MLPRegressor
 #
 
 """
-Discretize the variable x if needed
+Count the number of occurences of a discretized 1d or 2d space
+for classification or regression problems
     
 Parameters
 ----------
-x :       array-like, shape (n_samples)
-          The variable to be discretized, if needed.
-strategy: The strategy to assigne the points to the intervals
+x1, x2: array-like, shape (n_samples)
+t1, t2: Type of the variable, classification or regression
        
 Returns
 -------
-A new discretized vector.
+A vector with the frequencies of the unique values computed.
 """
-def _discretize_vector(x, strategy="quantile"):
+def _unique_count(x1, t1, x2=None, t2=None):
 
-    new_x = x.copy()
+    # Check that types have valid values
+
+    valid_types = ('classification', 'regression')
+
+    if t1 not in valid_types:
+        raise ValueError("Valid options for 't1' are {}. "
+                         "Got vartype={!r} instead."
+                         .format(valid_types, t1))
+
+    if (t2 is not None) and (t2 not in valid_types):
+        raise ValueError("Valid options for 't2' are {}. "
+                         "Got vartype={!r} instead."
+                         .format(valid_types, t2))
+
+    # Process first variable
+
+    if t1 == "classification":
+
+        # Econde categorical values as numbers
+        le = LabelEncoder()
+        le.fit(x1)
+        x1 = le.transform(x1)
+
+    else:
+
+        # Discretize variable
+        if x2 is not None:
+            x1 = _discretize_vector(x1, dim=1)
+        else:
+            x1 = _discretize_vector(x1, dim=2)            
+
+    # Process second variable
+
+    if x2 is not None:
+
+        if t2 == "classification":
+
+            # Econde categorical values as numbers
+            le = LabelEncoder()
+            le.fit(x2)
+            x2 = le.transform(x2)
+
+        else:
+
+            # Discretize variable
+            x2 = _discretize_vector(x2, dim=2)
+
+        x = (x1 + x2) * (x1 + x2 + 1) / 2 + x2
+        x = x.astype(int)
+
+    else:
+        
+        x = x1
+
+    # Return count        
+    
+    y     = np.bincount(x)
+    ii    = np.nonzero(y)[0]
+    count = y[ii]
+
+    return count
+
+
+"""
+Discretize a continous variable using a "uniform" strategy
+    
+Parameters
+----------
+x  : array-like, shape (n_samples)
+dim: Number of dimensions of space
+       
+Returns
+-------
+A new discretized vector of integers.
+"""
+def _discretize_vector(x, dim=1):
+
+    length = x.shape[0]
+    new_x  = x.copy().reshape(-1, 1)
 
     # Optimal number of bins
-    n_bins = int(np.sqrt(len(new_x)))
+    optimal_bins = int(np.cbrt(length))
+
+    # TODO: Think about this
+    # if dim == 1:
+    #     optimal_bins = int(np.sqrt(length))
+    # else:
+    #     optimal_bins = int(np.sqrt(np.sqrt(length)))
     
     # Correct the number of bins if it is too small
-    if n_bins <= 1:
-        n_bins = 2
-
-    # Check if we have too many unique values wrt samples
-    if len(np.unique(new_x)) > n_bins:
-        
-        new_x = new_x.reshape(-1, 1)
+    if optimal_bins <= 1:
+        optimal_bins = 2
     
+    # Repeat the process until we have data in all the intervals
+
+    total_bins    = optimal_bins
+    previous_bins = 0
+    stop          = False
+
+    while stop == False:
+
         # Avoid those annoying warnings
         with warnings.catch_warnings():
             
             warnings.simplefilter("ignore")
 
-            est = KBinsDiscretizer(n_bins=n_bins, encode='ordinal', strategy=strategy)
+            est = KBinsDiscretizer(n_bins=total_bins, encode='ordinal', strategy="uniform")
             est.fit(new_x)
-            new_x = est.transform(new_x)
-            
-        new_x = new_x[:,0]
+            tmp_x = est.transform(new_x)[:,0].astype(dtype=int)
+
+        y = np.bincount(tmp_x)
+        actual_bins = len(np.nonzero(y)[0])
+
+        if previous_bins == actual_bins:
+            # Nothing changed, better stop here
+            stop = True
+
+        if actual_bins < optimal_bins:
+            # Too few intervals with data
+            previous_bins = actual_bins
+            add_bins      = int( np.round( (length * (1 - actual_bins / optimal_bins)) / optimal_bins ) )
+            total_bins    = total_bins + add_bins
+        else:
+            # All intervals have data
+            stop = True
+
+    new_x = est.transform(new_x)[:,0].astype(dtype=int)
 
     return new_x
 
 
 """
-Discretize a dataset X
+Compute the length of a list of features (1d or 2d)
+and / or a target variable (classification or regression)
+using an optimal code using the frequencies of the categorical variables
+or a discretized version of the continuous variables
     
 Parameters
 ----------
-X :     array-like, shape (n_samples, n_features)
-       
-Returns
--------
-A new discretized version of the dataset (numpy array)
-"""
-def _discretize_matrix(X):
-
-    newX = list()
-    
-    for i in np.arange(X.shape[1]):
-            
-        new_x = _discretize_vector(X[:,i])
-        newX.append(new_x)    
-    
-    newX = np.array(newX)
-    newX = np.transpose(newX)
-    
-    return newX
-
-
-"""
-Compute the lenght of a list of values encoded using an optimal code
-    
-Parameters
-----------
-x :         array-like, shape (n_samples)
-            The values to be encoded.
+x1, x2: array-like, shape (n_samples)
+t1, t2: Type of the variable, classification or regression
        
 Returns
 -------
 Return the length of the encoded dataset (float)
 """
-def _optimal_code_length(x):
-    
-    # Discretize the variable x if needed
-    new_x = _discretize_vector(x)
-        
-    # Compute the optimal length
-    unique, count = np.unique(new_x, return_counts=True)
-    ldm = np.sum(count * ( - np.log2(count / len(new_x))))
-    
-    return ldm
+def _optimal_code_length(x1, t1, x2=None, t2=None):
 
-
-"""
-Compute the joint lenght of two variables
-encoded using an optimal code
+    count = _unique_count(x1=x1, t1=t1, x2=x2, t2=t2)
+    ldm = np.sum(count * ( - np.log2(count / len(x1) )))
     
-Parameters
-----------
-x1 :        array-like, shape (n_samples)
-            The values of the first variable.
-x2 :        array-like, shape (n_samples)
-            The values of the second variable.
-   
-Returns
--------
-Return the length of the encoded joint dataset (float)    
-"""
-def _optimal_code_length_joint(x1, x2):
-    
-    # Discretize the variables X1 and X2 if needed
-    new_x1 = _discretize_vector(x1)
-    new_x2 = _discretize_vector(x2)
-    
-    # Compute the optimal length
-    Joint =  list(zip(new_x1, new_x2))
-    unique, count = np.unique(Joint, return_counts=True, axis=0)
-    ldm = np.sum(count * ( - np.log2(count / len(Joint))))
-                                    
-    return ldm
-
-
-"""
-Compute the joint lenght of two variables and the target
-encoded using an optimal code
-    
-Parameters
-----------
-x1 :        array-like, shape (n_samples)
-            The values of the first variable.         
-x2 :        array-like, shape (n_samples)
-            The values of the second variable.         
-y  :        array-like, shape (n_samples)
-            The target values as numbers or strings.
-   
-Returns
--------
-Return the length of the encoded joint dataset (float)    
-"""
-def _optimal_code_length_3joint(x1, x2, y):
-  
-    # Discretize the variables X1 and X2 if needed
-    new_x1 = _discretize_vector(x1)
-    new_x2 = _discretize_vector(x2)
-    new_y  = _discretize_vector(y)
-            
-    # Compute the optimal length
-    Joint =  list(zip(new_x1, new_x2, new_y))
-    unique, count = np.unique(Joint, return_counts=True, axis=0)
-    ldm = np.sum(count * ( - np.log2(count / len(Joint))))
-                    
     return ldm
 
 
 #
 # Class Miscoding
 # 
-
 class Miscoding(BaseEstimator):
     """
     Given a dataset X = {x1, ..., xp} composed by p features, and a target
@@ -236,21 +251,22 @@ class Miscoding(BaseEstimator):
         miscoding = Miscoding()
         miscoding.fit(X, y)
         msd = miscoding.miscoding_features()
-
     """
-    
-    def __init__(self, redundancy=True):
+
+    def __init__(self, vartype="classification", redundancy=False):
         """
         Initialization of the class Miscoding
         
         Parameters
         ----------
+        vartype:    The type of the target variables, classification or regression
         redundancy: if "True" takes into account the redundancy between features
                     to compute the miscoding, if "False" only the miscoding with
                     respect to the target variable is computed.
           
         """        
 
+        self.vartype    = vartype
         self.redundancy = redundancy
         
         return None
@@ -274,17 +290,25 @@ class Miscoding(BaseEstimator):
         self
         """
         
-        self.X_, self.y_ = check_X_y(X, y, dtype="numeric")
+        self.X_, self.y_ = check_X_y(X, y, dtype=None)
 
-        if self.redundancy:
-            self.regular_ = self._miscoding_features_joint()
-        else:
-            self.regular_ = self._miscoding_features_single()
+        # Joint miscoding is not supported yet
+        self.regular_ = self._miscoding_features_single()
+
+        # if self.redundancy:
+        #     self.regular_ = self._miscoding_features_joint()
+        # else:
+        #     self.regular_ = self._miscoding_features_single()
 
         self.adjusted_ = 1 - self.regular_
-        self.adjusted_ = self.adjusted_ / np.sum(self.adjusted_)
 
-        self.partial_ = self.adjusted_ - self.regular_ / np.sum(self.regular_)
+        if np.sum(self.adjusted_) != 0:
+            self.adjusted_ = self.adjusted_ / np.sum(self.adjusted_)
+
+        if np.sum(self.regular_) != 0:
+            self.partial_  = self.adjusted_ - self.regular_ / np.sum(self.regular_)
+        else:
+            self.partial_  = self.adjusted_
         
         return self
 
@@ -313,11 +337,13 @@ class Miscoding(BaseEstimator):
             return self.adjusted_
         elif mode == 'partial':
             return self.partial_
+        else:
+            valid_modes = ('regular', 'adjusted', 'partial')
+            raise ValueError("Valid options for 'mode' are {}. "
+                             "Got mode={!r} instead."
+                            .format(valid_modes, mode))
 
-        valid_mode = ('regular', 'adjusted', 'partial')
-        raise ValueError("Valid options for 'mode' are {}. "
-                         "Got mode={!r} instead."
-                         .format(valid_mode, mode)) 
+        return None 
 
 
     def miscoding_model(self, model):
@@ -339,8 +365,10 @@ class Miscoding(BaseEstimator):
             subset = self._MultinomialNB(model)
         elif isinstance(model, DecisionTreeClassifier):
             subset = self._DecisionTreeClassifier(model)
-        elif isinstance(model, CalibratedClassifierCV) and model.get_params()['base_estimator'].get_params()['kernel']=='linear':
+        elif isinstance(model, SVC) and model.get_params()['kernel']=='linear':
             subset = self._LinearSVC(model)
+        elif isinstance(model, SVC) and model.get_params()['kernel']=='poly':
+            subset = self._SVC(model)
         elif isinstance(model, MLPClassifier):
             subset = self._MLPClassifier(model)
         elif isinstance(model, LinearRegression):
@@ -386,33 +414,49 @@ class Miscoding(BaseEstimator):
         return miscoding
 
 
-    def features_matrix(self):
+    def features_matrix(self, mode="adjusted"):
         """
-        Compute a matrix of adjusted miscodings of each feature
-        assuming the others
-        
+        Compute a matrix of adjusted miscodings for the features
+
+        Parameters
+        ----------
+        mode  : the mode of miscoding, possible values are 'regular' for the true miscoding
+                and 'adjusted' for the normalized inverted values
+
         Returns
         -------
-        Return the matrix with the miscodings (float)
+        Return the matrix (n_features x n_features) with the miscodings (float)
         """
-                
+
+        check_is_fitted(self)
+        
+        valid_modes = ('regular', 'adjusted')
+
+        if mode not in valid_modes:
+            raise ValueError("Valid options for 'mode' are {}. "
+                             "Got mode={!r} instead."
+                            .format(valid_modes, mode))
+
         miscoding = np.zeros([self.X_.shape[1], self.X_.shape[1]])
 
         # Compute the regular matrix
 
         for i in np.arange(self.X_.shape[1]-1):
             
-            ldm_X1 = _optimal_code_length(self.X_[:,i])
+            ldm_X1 = _optimal_code_length(x1=self.X_[:,i], t1="regression")
 
             for j in np.arange(i+1, self.X_.shape[1]):
                  
-                ldm_X2   = _optimal_code_length(self.X_[:,j])
-                ldm_X1X2 = _optimal_code_length_joint(self.X_[:,i], self.X_[:,j])
+                ldm_X2   = _optimal_code_length(x1=self.X_[:,j], t1="regression")
+                ldm_X1X2 = _optimal_code_length(x1=self.X_[:,i], t1="regression", x2=self.X_[:,j], t2="regression")
                        
                 mscd = ( ldm_X1X2 - min(ldm_X1, ldm_X2) ) / max(ldm_X1, ldm_X2)
                 
                 miscoding[i, j] = mscd
                 miscoding[j, i] = mscd
+
+        if mode == "regular":
+            return miscoding
                 
         # Compute the normalized matrix
         
@@ -436,19 +480,13 @@ class Miscoding(BaseEstimator):
     def _miscoding_features_single(self):
                  
         miscoding = list()
-        
-        # Discretize y and compute the encoded length
-        
-        ldm_y = _optimal_code_length(self.y_)
+                
+        ldm_y = _optimal_code_length(x1=self.y_, t1=self.vartype)
 
         for i in np.arange(self.X_.shape[1]):
-
-            # Discretize feature and compute lengths
-            
-            ldm_X  = _optimal_code_length(self.X_[:,i])
-            ldm_Xy = _optimal_code_length_joint(self.y_, self.X_[:,i])
-
-            # Compute miscoding
+                        
+            ldm_X  = _optimal_code_length(x1=self.X_[:,i], t1="regression")
+            ldm_Xy = _optimal_code_length(x1=self.X_[:,i], t1="regression", x2=self.y_, t2=self.vartype)
                        
             mscd = ( ldm_Xy - min(ldm_X, ldm_y) ) / max(ldm_X, ldm_y)
                 
@@ -466,6 +504,7 @@ class Miscoding(BaseEstimator):
     -------
     Return a numpy array with the regular miscodings
     """
+    # TODO: Not supported yet!
     def _miscoding_features_joint(self):
 
         # Compute non-redundant miscoding
@@ -481,39 +520,24 @@ class Miscoding(BaseEstimator):
                
         red_matrix = np.ones([self.X_.shape[1], self.X_.shape[1]])
 
-        ldm_y = _optimal_code_length(self.y_)
-        new_y = _discretize_vector(self.y_)
-        new_X = _discretize_matrix(self.X_)
+        ldm_y = _optimal_code_length(x1=self.y_, t1=self.vartype)
 
         for i in np.arange(self.X_.shape[1]-1):
-            
-            new_x1 = new_X[:,i]
-
+                        
             for j in np.arange(i+1, self.X_.shape[1]):
                 
-                new_x2 = new_X[:,j]
+                ldm_X1X2  = _optimal_code_length(x1=self.X_[:,i], t1="regression", x2=self.X_[:,j], t2="regression")
+                ldm_X1X2Y = _optimal_code_length(x1=self.X_[:,i], t1="regression", x2=self.y_, t2=self.vartype)
                 
-                Joint =  list(zip(new_x1, new_x2))
-                unique, count = np.unique(Joint, return_counts=True, axis=0)
-                ldm = np.sum(count * ( - np.log2(count / len(Joint))))
-                
-                ldm_X1X2  = ldm
-                
-                Joint =  list(zip(new_x1, new_x2, new_y))
-                unique, count = np.unique(Joint, return_counts=True, axis=0)
-                ldm = np.sum(count * ( - np.log2(count / len(Joint))))
-                            
-                ldm_X1X2Y = ldm
-                       
                 tmp = ( ldm_X1X2Y - min(ldm_X1X2, ldm_y) ) / max(ldm_X1X2, ldm_y)
                                 
                 red_matrix[i, j] = tmp
                 red_matrix[j, i] = tmp
-         
+        
         #
         # Compute the joint miscoding 
         #
-        
+
         viu       = np.zeros(self.X_.shape[1], dtype=np.int8)
         miscoding = np.zeros(self.X_.shape[1])
 
@@ -559,7 +583,7 @@ class Miscoding(BaseEstimator):
             miscoding[np.argmin(tmp)] = np.min(tmp)
 
             tmp = np.ones(self.X_.shape[1]) * np.inf
-
+        
         return miscoding
 
 
@@ -597,6 +621,19 @@ class Miscoding(BaseEstimator):
     Return array with the attributes in use
     """
     def _LinearSVC(self, estimator):
+
+        # All the attributes are in use
+        attr_in_use = np.ones(self.X_.shape[1], dtype=int)
+            
+        return attr_in_use
+
+
+    """
+    Compute the attributes in use for a support vector classifier with a polynomial kernel
+    
+    Return array with the attributes in use
+    """
+    def _SVC(self, estimator):
 
         # All the attributes are in use
         attr_in_use = np.ones(self.X_.shape[1], dtype=int)
@@ -668,8 +705,7 @@ class Miscoding(BaseEstimator):
 
 #
 # Class Inaccuracy
-#
-        
+# 
 class Inaccuracy(BaseEstimator):
     """
     The fastautoml.Inaccuracy class allow us to compute the quality of
@@ -683,7 +719,7 @@ class Inaccuracy(BaseEstimator):
 
         X, y = load_digits(return_X_y=True)
 
-        tree = DecisionTreeClassifier(max_depth=i, random_state=42)
+        tree = DecisionTreeClassifier(min_samples_leaf=5, random_state=42)
         tree.fit(X, y)
 
         inacc = Inaccuracy()
@@ -691,24 +727,35 @@ class Inaccuracy(BaseEstimator):
         inacc.inaccuracy_model(tree)
 
     """    
-    
-    def __init__(self):
+
+    def __init__(self, vartype="classification"):
+        """
+        Initialize the Inaccuracy class
+
+        Parameters
+        ----------
+        vartype: The type of the target variable, classification or regression
+
+        Returns
+        -------
+        self
+        """
+
+        self.vartype = vartype
         
         return None
     
     
     def fit(self, X, y):
-        """Initialize the inaccuracy class with a dataset
+        """
+        Fit the inaccuracy with a dataset
         
         Parameters
         ----------
         X : array-like, shape (n_samples, n_features)
             Sample vectors from which models have been trained.
-            Continuous and categorical variables are supported
-            if the trained model support them.
             
         y : array-like, shape (n_samples)
-            The target values as integers or strings.
             Continuous and categorical variables are supported
             if the trained model support them.
             
@@ -719,7 +766,7 @@ class Inaccuracy(BaseEstimator):
         
         self.X_, self.y_ = check_X_y(X, y, dtype=None)
                 
-        self.len_y_ = _optimal_code_length(self.y_)
+        self.len_y = _optimal_code_length(x1=self.y_, t1=self.vartype)
         
         return self
 
@@ -727,49 +774,47 @@ class Inaccuracy(BaseEstimator):
     def inaccuracy_model(self, model):
         """
         Compute the inaccuracy of a model
-        
+
+        Parameters
+        ----------       
         model : a trained model with a predict() method
-         
+
+        Returns
+        -------         
         Return the inaccuracy (float)
         """        
         
         check_is_fitted(self)
         
-        Pred = model.predict(self.X_)
-        len_pred = _optimal_code_length(Pred)
-        
-        len_joint = _optimal_code_length_joint(Pred, self.y_)
-        
-        inacc = ( len_joint - min(self.len_y_, len_pred) ) / max(self.len_y_, len_pred)
+        Pred      = model.predict(self.X_)
+        len_pred  = _optimal_code_length(x1=Pred, t1=self.vartype)
+        len_joint = _optimal_code_length(x1=Pred, t1=self.vartype, x2=self.y_, t2=self.vartype)
+        inacc     = ( len_joint - min(self.len_y, len_pred) ) / max(self.len_y, len_pred)
 
-        return inacc
+        return inacc 
 
     
     def inaccuracy_predictions(self, predictions):
         """
         Compute the inaccuracy of a list of predicted values
-        
-         pred : array-like, shape (n_samples)
-                The list of predicted values
-                
+
+        Parameters
+        ----------       
+        pred : array-like, shape (n_samples)
+               The list of predicted values
+
+        Returns
+        -------                
         Return the inaccuracy (float)
         """        
         
         check_is_fitted(self)
         
-        len_pred = _optimal_code_length(predictions)
-        
-        len_joint = _optimal_code_length_joint(predictions, self.y_)
-        
-        inacc = ( len_joint - min(self.len_y_, len_pred) ) / max(self.len_y_, len_pred)
+        len_pred  = _optimal_code_length(x1=predictions, t1=self.vartype)
+        len_joint = _optimal_code_length(x1=predictions, t1=self.vartype, x2=self.y_, t2=self.vartype)
+        inacc     = ( len_joint - min(self.len_y, len_pred) ) / max(self.len_y, len_pred)
 
         return inacc    
-
-
-		  
-								
-		
-									 
 
  
 #
@@ -778,15 +823,28 @@ class Inaccuracy(BaseEstimator):
     
 class Surfeit(BaseEstimator):
     
-    def __init__(self, compressor="bz2"):
+    def __init__(self, vartype="classification", compressor="bz2"):
+        """
+        Initialize the Surfeit class
+
+        Parameters
+        ----------
+        vartype:    The type of the target variables, classification or regression
+        compressor: The compressor used to encode the model
+
+        Returns
+        -------
+        self
+        """
 	
-        self.compressor = compressor
+        self.vartype     = vartype
+        self.compressor  = compressor
         
         return None
     
 
     def fit(self, X, y):
-        """Initialize the surfeit class with dataset
+        """Initialize the Surfeit class with dataset
         
         Parameters
         ----------
@@ -800,12 +858,10 @@ class Surfeit(BaseEstimator):
         -------
         self
         """
-
-									
         
-        self.X_, self.y_ = check_X_y(X, y, dtype="numeric")
+        self.X_, self.y_ = check_X_y(X, y, dtype=None)
                 
-        self.len_y_ = _optimal_code_length(self.y_)
+        self.len_y_ = _optimal_code_length(x1=self.y_, t1=self.vartype)
         
         return self
     
@@ -832,8 +888,10 @@ class Surfeit(BaseEstimator):
             model_str = self._MultinomialNB(model)
         elif isinstance(model, DecisionTreeClassifier):
             model_str = self._DecisionTreeClassifier(model)
-        elif isinstance(model, CalibratedClassifierCV) and model.get_params()['base_estimator'].get_params()['kernel']=='linear':
+        elif isinstance(model, SVC) and model.get_params()['kernel']=='linear':
             model_str = self._LinearSVC(model)
+        elif isinstance(model, SVC) and model.get_params()['kernel']=='poly':
+            model_str = self._SVC(model)
         elif isinstance(model, MLPClassifier):
             model_str = self._MLPClassifier(model)
         elif isinstance(model, LinearRegression):
@@ -892,40 +950,6 @@ class Surfeit(BaseEstimator):
         return redundancy
 
 
-    def _redundancy(self):
-
-        # Compute the model string and its compressed version
-        model = self._tree2str().encode()
-
-        if self.compressor == "lzma":
-            compressed = lzma.compress(model, preset=9)
-        elif self.compressor == "zlib":
-            compressed = zlib.compress(model, level=9)
-        else: # By default use bz2
-            compressed = bz2.compress(model, compresslevel=9)
-
-        # Check if the model is too small to compress
-        if len(compressed) > len(model):
-            return 1 - 3/4    # Experimental values for bzip
-
-        if self.lcd < len(compressed):
-            # redundancy = 1 - l(C(y)) / l(m)
-            redundancy = 1 - self.lcd / len(model)
-        else:
-            # redundancy = 1 - l(m*) / l(m)
-            redundancy = 1 - len(compressed) / len(model)
-
-        return redundancy
-
-    
-		  
-								
-		
-									 
-		
-				   
-	
-
     """
     Convert a MultinomialNB classifier into a string
     """
@@ -979,47 +1003,362 @@ class Surfeit(BaseEstimator):
     
     """
     Convert a LinearSVC classifier into a string
-    TODO: Review
     """
     def _LinearSVC(self, estimator):
   
         #
         # Discretize similarities
         #
-        
-		# CalibratedClassifierCV does a 5-fold cross-validation
-		# Compute the average of coef_ attribute of the 5 classifiers
-        M = np.average([clf.base_estimator.coef_ for clf in estimator.calibrated_classifiers_],axis=0)
+
+        M = estimator.coef_
         shape = M.shape
         M = M.flatten()
         M = _discretize_vector(M)
         M = np.array(M)
         M = M.reshape(shape)
         
+        intercept = estimator.intercept_
+        shape = intercept.shape
+        intercept = intercept.flatten()
+        intercept = _discretize_vector(intercept)
+        intercept = np.array(intercept)
+        intercept = intercept.reshape(shape)
+        
+        classes = estimator.classes_
+        
+        if len(classes) == 2:
+        
+            #
+            # Create the model
+            #
+
+            # Header
+            string = "def LinearSVC(X):\n"
+                 
+            # Similarities
+            string = string + "    M = ["        
+            for j in np.arange(len(M)-1):
+                string = string + str(M[j]) + ", "
+            string = string + str(M[-1])
+            string = string + "]]\n"
+            
+            string = string + "    intercept = ["        
+            string = string + str(intercept)
+            string = string + "]\n"
+            
+            # Computation of the decision function
+            string = string + '    y_hat = [None]*len(X)'
+            string = string + '    for i in range(len(X)):\n'
+            string = string + '        prob = 0\n'
+            string = string + '        for k in range(len(M)):\n'
+            string = string + '            prob = prob + X[i][k] * M[k]\n'
+            string = string + '        prob = prob + intercept\n'
+			
+            #Prediction
+            string = string + '        if prob > 0:\n'
+            string = string + '            y_hat[i] = 0\n'
+            string = string + '        else:\n'
+            string = string + '            y_hat[i] = 1\n'
+            string = string + '    return y_hat\n'
+        
+        else:
+        
+            #
+            # Create the model
+            #
+
+            # Header
+            string = "def LinearSVC(X):\n"
+                 
+            # Similarities
+            string = string + "    M = ["        
+            for i in np.arange(len(M)-1):
+                string = string + "["
+                for j in np.arange(len(M[i])-1):
+                    string = string + str(M[i][j]) + ", "
+                string = string + str(M[i][-1])
+                string = string + "], "
+            string = string + "["
+            for j in np.arange(len(M[-1])-1):
+                string = string + str(M[-1][j]) + ", "
+            string = string + str(M[-1][-1])
+            string = string + "]]\n"
+            
+            string = string + "    intercept = ["        
+            for i in np.arange(len(intercept)-1):
+                string = string + str(intercept[i])
+                string = string + ", "
+            string = string + str(intercept[-1])
+            string = string + "]\n"
+            
+            string = string + "    classes = ["        
+            for i in np.arange(len(classes-1)):
+                string = string + str(classes[i]) + ", "
+            string = string + str(classes[-1])
+            string = string + "]]\n"
+           
+		    # Computation of the decision function ('ovo' strategy)
+            string = string + '    y_hat = [None]*len(X)'
+            string = string + '    for i in range(len(X)):\n'
+            string = string + '        votes = [0]*len(classes)\n'
+            string = string + '        idx = 0\n'
+            string = string + '        for j in range(len(classes)):\n'
+            string = string + '            for l in range(len(classes)-j-1):\n'
+            string = string + '                prob = 0\n'
+            string = string + '                for k in range(len(M[idx])):\n'
+            string = string + '                    prob = prob + X[i][k] * M[idx][k]\n'
+            string = string + '                prob = prob + intercept[idx]\n'
+            string = string + '                if prob > 0:\n'
+            string = string + '                    votes[j] = votes[j] + 1\n'
+            string = string + '                else:\n'
+            string = string + '                    votes[l+j+1] = votes[l+j+1] + 1\n'
+            string = string + '                idx = idx + 1\n'
+            
+            # Prediction
+            string = string + '        max_vote = 0\n'
+            string = string + '        i_max_vote = 0\n'
+            string = string + '        for k in range(len(votes)):\n'
+            string = string + '            if votes[k]>max_vote:\n'
+            string = string + '                max_vote = votes[k]\n'
+            string = string + '                i_max_vote = k\n'
+            string = string + '        y_hat[i] = classes[i_max_vote]\n'
+            string = string + '    return y_hat\n'
+        
+        return string
+
+
+    """
+	Convert a SVC classifier into a string
+	"""
+    string = ""
+    affiche = 1
+    def _SVC(self, estimator):
+	
         #
-        # Create the model
+        # Discretize similarities
         #
 
-        # Header
-        string = "def LinearSVC(X):\n"
-             
-        # Similarities
-        string = string + "    M["        
-        for i in np.arange(len(M)):
-            string = string + str(M[i]) + ", "
-        string = string + "]\n"
 
-        string = string + "    y_hat    = None\n"
-        string = string + "    max_prob = 0\n"
-        string = string + "    for i in range(len(estimator.classes_)):\n"
-        string = string + "        prob = 1\n"
-        string = string + "        for j in range(len(M[i])):\n"
-        string = string + "            prob = prob * M[i][j]\n"
-        string = string + "        prob = py[i] *  prob\n"
-        string = string + "        if prob > max_prob:\n"
-        string = string + "            y_hat = estimator.classes_[i]\n"
-        string = string + "    return y_hat\n"
-                
+        M = estimator._dual_coef_
+        shape = M.shape
+        M = M.flatten()
+        M = _discretize_vector(M)
+        M = np.array(M)
+        M = M.reshape(shape)
+        
+        support_vectors = estimator.support_vectors_
+        shape = support_vectors.shape
+        support_vectors = support_vectors.flatten()
+        support_vectors = _discretize_vector(support_vectors)
+        support_vectors = np.array(support_vectors)
+        support_vectors = support_vectors.reshape(shape)
+        
+        if len(estimator.classes_) == 2:
+        
+            #
+            # Create the model
+
+            # Header
+            string = "def SVC(X):\n"
+                 
+            # Similarities
+            string = string + "    dual_coef = ["        
+            for i in np.arange(len(M)-1):
+                string = string + "["
+                for j in np.arange(len(M[i])-1):
+                    string = string + str(M[i][j]) + ", "
+                string = string + str(M[i][-1])
+                string = string + "], "
+            string = string + "["
+            for j in np.arange(len(M[-1])-1):
+                string = string + str(M[-1][j]) + ", "
+            string = string + str(M[-1][-1])
+            string = string + "]]\n"
+            
+            string = string + "    intercept = ["        
+            string = string + str(estimator.intercept_)
+            string = string + "]\n"
+            
+            string = string + "    classes = ["        
+            for i in np.arange(len(estimator.classes_)-1):
+                string = string + str(estimator.classes_[i]) + ", "
+            string = string + str(estimator.classes_[-1])
+            string = string + "]\n"
+            
+            string = string + "    support_vectors = ["        
+            for i in np.arange(len(support_vectors)-1):
+                string = string + "["
+                for j in np.arange(len(support_vectors[i])-1):
+                    string = string + str(support_vectors[i][j]) + ", "
+                string = string + str(support_vectors[i][-1])
+                string = string + "], "
+            string = string + "["
+            for j in np.arange(len(support_vectors[-1])-1):
+                string = string + str(support_vectors[-1][j]) + ", "
+            string = string + str(support_vectors[-1][-1])
+            string = string + "]]\n"
+            
+            string = string + "    n_support = ["        
+            for i in np.arange(len(estimator.n_support_)-1):
+                string = string + str(estimator.n_support_[i]) + ", "
+            string = string + str(estimator.n_support_[-1])
+            string = string + "]\n"
+            
+            string = string + "    degree = "
+            string = string + str(estimator.degree)
+            string = string + "    \n"
+            
+            string = string + "    gamma = "
+            if estimator.gamma == 'scale':
+                string = string + str(1/(len(support_vectors[0])*np.var(self.X_)))
+            elif estimator.gamma == 'auto':
+                string = string + str(1/len(support_vectors[0]))
+            else:
+                string = string + str(estimator.gamma)
+            string = string + "    \n"
+            
+            string = string + "    r = "
+            string = string + str(estimator.coef0)
+            string = string + "    \n"
+
+            # Computation of the decision function ('ovo' strategy)
+            string = string + "    y_hat    = [None]*len(X)\n"
+            string = string + "    for i in range(len(X)):\n"
+            string = string + "        prob = 0\n" 
+            string = string + "        for i_sv in range(len(support_vectors)):\n"
+            string = string + "            sum = 0\n" 
+            string = string + "            for k in range(len(X[i])):\n"
+            string = string + "                sum = sum + support_vectors[i_sv][k] * X[i][k]\n"
+            string = string + "            x = 1\n"
+            string = string + "            for k in range(degree):\n"
+            string = string + "                x = x * (gamma * sum + r)\n"
+            string = string + "            prob = prob + x * dual_coef[i_sv]\n"
+            string = string + "        prob = prob + intercept[0]\n"
+	
+            # Prediction
+            string = string + "        if prob > 0:\n"
+            string = string + "            y_hat[i] = 0\n"
+            string = string + "        else:\n"
+            string = string + "            y_hat[i] = 1\n"
+            string = string + "    return y_hat\n"
+
+        else:
+        
+            #
+            # Create the model
+            #
+
+            # Header
+            string = "def SVC(X):\n"
+                 
+            # Similarities
+            string = string + "    dual_coef = ["        
+            for i in np.arange(len(M)-1):
+                string = string + "["
+                for j in np.arange(len(M[i])-1):
+                    string = string + str(M[i][j]) + ", "
+                string = string + str(M[i][-1])
+                string = string + "], "
+            string = string + "["
+            for j in np.arange(len(M[-1])-1):
+                string = string + str(M[-1][j]) + ", "
+            string = string + str(M[-1][-1])
+            string = string + "]]\n"
+            
+            string = string + "    intercept = ["        
+            for i in np.arange(len(estimator.intercept_)-1):
+                string = string + str(estimator.intercept_[i]) + ", "
+            string = string + str(estimator.intercept_[-1])
+            string = string + "]\n"
+            
+            string = string + "    classes = ["        
+            for i in np.arange(len(estimator.classes_)-1):
+                string = string + str(estimator.classes_[i]) + ", "
+            string = string + str(estimator.classes_[-1])
+            string = string + "]\n"
+            
+            string = string + "    support_vectors = ["        
+            for i in np.arange(len(support_vectors)-1):
+                string = string + "["
+                for j in np.arange(len(support_vectors[i])-1):
+                    string = string + str(support_vectors[i][j]) + ", "
+                string = string + str(support_vectors[i][-1])
+                string = string + "], "
+            string = string + "["
+            for j in np.arange(len(support_vectors[-1])-1):
+                string = string + str(support_vectors[-1][j]) + ", "
+            string = string + str(support_vectors[-1][-1])
+            string = string + "]]\n"
+            
+            string = string + "    n_support = ["        
+            for i in np.arange(len(estimator.n_support_)-1):
+                string = string + str(estimator.n_support_[i]) + ", "
+            string = string + str(estimator.n_support_[-1])
+            string = string + "]\n"
+            
+            string = string + "    idx_support = ["        
+            for i in np.arange(len(estimator.n_support_)):
+                string = string + str(np.sum(estimator.n_support_[:i])) + ", "
+            string = string + str(np.sum(estimator.n_support_))
+            string = string + "]\n"
+            
+            string = string + "    degree = "
+            string = string + str(estimator.degree)
+            string = string + "    \n"
+            
+            string = string + "    gamma = "
+            if estimator.gamma == 'scale':
+                string = string + str(1/(len(support_vectors[0])*np.var(self.X_)))
+            elif estimator.gamma == 'auto':
+                string = string + str(1/len(support_vectors[0]))
+            else:
+                string = string + str(estimator.gamma)
+            string = string + "    \n"
+            
+            string = string + "    r = "
+            string = string + str(estimator.coef0)
+            string = string + "    \n"
+
+            # Computation of the decision function ('ovo' strategy)
+            string = string + "    y_hat    = [None]*len(X)\n"
+            string = string + "    for i in range(len(X)):\n"
+            string = string + "        votes = [0]*len(classes)\n"
+            string = string + "        idx = 0\n"
+            string = string + "        for j in range(len(classes)):\n"
+            string = string + "            for l in range(len(classes)-j-1):\n"
+            string = string + "                prob = 0\n" 
+            string = string + "                sum = 0\n" 
+            string = string + "                for i_sv in range(idx_support[j],idx_support[j+1]):\n"
+            string = string + "                    for k in range(len(X[i])):\n"
+            string = string + "                        sum = sum + support_vectors[i_sv][k] * X[i][k]\n"
+            string = string + "                    x = 1\n"
+            string = string + "                    for k in range(degree):\n"
+            string = string + "                        x = x * (gamma * sum + r)\n"
+            string = string + "                    prob = prob + x * dual_coef[l+j][i_sv]\n"
+            string = string + "                sum = 0\n"
+            string = string + "                for i_sv in range(idx_support[j+l],idx_support[j+l+1]):\n"
+            string = string + "                    for k in range(len(X[i])):\n"
+            string = string + "                        sum = sum + support_vectors[i_sv][k] * X[i][k]\n"
+            string = string + "                    x = 1\n"
+            string = string + "                    for k in range(degree):\n"
+            string = string + "                        x = x * (gamma * sum + r)\n"
+            string = string + "                    prob = prob + x * dual_coef[j][i_sv]\n"
+            string = string + "                prob = prob + intercept[idx]\n"
+            string = string + "                if prob > 0:\n"
+            string = string + "                    votes[j] = votes[j] + 1\n"
+            string = string + "                else:\n"
+            string = string + "                    votes[l+j+1] = votes[l+j+1] + 1\n"
+            string = string + "                idx = idx + 1\n"
+		
+            # Prediction
+            string = string + "        max_vote = 0\n"
+            string = string + "        i_max_vote = 0\n"
+            string = string + "        for k in range(len(votes)):\n"
+            string = string + "            if votes[k]>max_vote:\n"
+            string = string + "                max_vote, i_max_vote = votes[k], k\n"
+            string = string + "        y_hat[i] = classes[i_max_vote]\n"
+            string = string + "    return y_hat\n"
+           
         return string
 
 
@@ -1065,9 +1404,7 @@ class Surfeit(BaseEstimator):
 
         tree_string = ""
         
-        #
         # Compute the tree header
-        #
         
         features_set = set()
                 
@@ -1079,10 +1416,7 @@ class Surfeit(BaseEstimator):
         
         tree_string = tree_string + "def tree" + str(features_set) + ":\n"
 
-        #
         # Compute the tree body
-        # 
-        
         tree_string = tree_string + self._treebody2str(estimator, 0, 1)
 
         return tree_string
@@ -1469,13 +1803,17 @@ class Surfeit(BaseEstimator):
 
         return string        
     
-        
+#
+# Class Nescience
+# 
+       
 class Nescience(BaseEstimator):
     
-    def __init__(self, compressor="bz2", method="Arithmetic"):
+    def __init__(self, vartype="classification", compressor="bz2", method="Harmonic"):
 	
+        self.vartype    = vartype
         self.compressor = compressor
-        self.method = method
+        self.method     = method
         
         return None
     
@@ -1502,17 +1840,15 @@ class Nescience(BaseEstimator):
           
         """
 		
-								  
-									  
+        X, y = check_X_y(X, y, dtype=None)
 
-        X, y = check_X_y(X, y, dtype="numeric")
-
-        self.miscoding_  = Miscoding()
-        self.inaccuracy_ = Inaccuracy()
-        self.surfeit_    = Surfeit(self.compressor)
-        
+        self.miscoding_  = Miscoding(vartype=self.vartype, redundancy=False)
         self.miscoding_.fit(X, y)
-        self.inaccuracy_.fit(X, y)
+        
+        self.inaccuracy_ = Inaccuracy(vartype=self.vartype)
+        self.inaccuracy_.fit(X, y)        
+            
+        self.surfeit_    = Surfeit(vartype=self.vartype, compressor=self.compressor)
         self.surfeit_.fit(X, y)
         
         return self
@@ -1587,22 +1923,19 @@ class Nescience(BaseEstimator):
         elif self.method == "Addition":
             # The product of both quantities
             nescience = miscoding + inaccuracy + surfeit
-        elif self.method == "Weighted":
+        # elif self.method == "Weighted":
             # Weigthed sum
             # TODO: Not yet supported
-            nescience = self.weight_miscoding * miscoding + self.weight_inaccuracy * inaccuracy + self.weight_surfeit * surfeit
+            # nescience = self.weight_miscoding * miscoding + self.weight_inaccuracy * inaccuracy + self.weight_surfeit * surfeit
         elif self.method == "Harmonic":
             # Harmonic mean
             nescience = 3 / ( (1/miscoding) + (1/inaccuracy) + (1/surfeit))
         # else -> rise exception
-                
-        return nescience
+        
+        # TODO: Remove
+        print("Miscoding:", miscoding, "Inaccuracy:", inaccuracy, "Surfeit:", surfeit, "Nescience:", nescience)
 
-	
-		  
-								
-				
-				   
+        return nescience
 
 
 class AutoClassifier(BaseEstimator, ClassifierMixin):
@@ -1616,28 +1949,42 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
 
     
     def fit(self, X, y):
+        """
+        Select the best model that explains y given X.
         
-        # TODO: document
+        Parameters
+        ----------
+        X : array-like, shape (n_samples, n_features)
+            Sample vectors from which to compute miscoding.
+            
+        y : array-like, shape (n_samples)
+            The target values as numbers.
         
+        auto: find automatically the optimal model
+            
+        Returns
+        -------
+        self
+        """        
+                
         # Supported Classifiers
         
         self.classifiers_ = [
             self.MultinomialNB,
             self.DecisionTreeClassifier,
             self.LinearSVC,
+            self.SVC,            
             self.MLPClassifier
         ]
 
-        self.X_, self.y_ = check_X_y(X, y, dtype="numeric")
-        check_classification_targets(self.y_)
+        self.X_, self.y_ = check_X_y(X, y, dtype=None)
+        # check_classification_targets(self.y_)
 
-        self.nescience_ = Nescience()
+        self.nescience_ = Nescience(vartype="classification")
         self.nescience_.fit(self.X_, self.y_)
         
-				
         # new y contains class indexes rather than labels in the range [0, n_classes]
-        self.classes_, self.y_ = np.unique(self.y_, return_inverse=True)
-										  
+        self.classes_, self.y_ = np.unique(self.y_, return_inverse=True)						  
         
         nsc = 1
         self.model_ = None
@@ -1649,13 +1996,19 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
             for clf in self.classifiers_:
             
                 # TODO: print classifier if verbose
+                print("Classifier: " + str(clf), end='')
                 
                 # If X contains negative values, MultinomialNB is skipped
                 if clf == self.MultinomialNB and not (self.X_>=0).all():
+                    # TODO: Should be based on a verbose flag
+                    print("Skipped!")                
                     continue
                 
                 (new_nsc, new_model, new_viu) = clf()
-                        
+
+                # TODO: Should be based on a verbose flag
+                print("Nescience:", new_nsc)                
+
                 if new_nsc < nsc:
                     nsc   = new_nsc
                     self.model_ = new_model
@@ -1715,7 +2068,7 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         """
         
         check_is_fitted(self)
-        X, y = check_X_y(X, y, dtype="numeric")
+        X, y = check_X_y(X, y, dtype=None)
         
         if self.viu_ is None:
             msdX = X
@@ -1750,12 +2103,136 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         
         # No hyperparameters to optimize
         
-        model = CalibratedClassifierCV(base_estimator=SVC(kernel='linear', probability=True, random_state=self.random_state))
+        model = SVC(kernel='linear', probability=True, random_state=self.random_state, decision_function_shape='ovo')
         model.fit(self.X_, self.y_)
 
         nsc = self.nescience_.nescience(model)
             
-        return (nsc, model, None)    
+        return (nsc, model, None)
+
+
+    def SVC(self): 
+       
+        # Different searches are possible to find the best hyperparameters
+        # The following one produced good results on the three datasets it was tested on
+        
+        # The four hyperparameters to optimize
+        hyper_param_default = ['degree', 'C', 'gamma', 'coef0']
+		
+        # The order in which they will be treated in the search
+        hyper_param_order = [1, 2, 3, 4]
+		
+        # gamma is searched among the same values as C and coef0 but is always multiplied by inv (its default value)
+        inv = 1/(len(self.X_[0])*np.var(self.X_))
+		
+        # maximum number of iterations to fit the SVC models in this search. Could be reduced to 1e5 or 1e4
+        max_iter = 1e6
+
+        hyper_param = [] 
+        for i in range(4):
+            hyper_param.append(hyper_param_default[hyper_param_order[i]-1])
+        
+        # Default values
+        param_value = {'degree': 5, 'C': 1, 'gamma': inv, 'coef0': 1}
+		
+        tmp_model = SVC(kernel='poly', max_iter=max_iter)
+        tmp_model.set_params(**param_value)
+        tmp_model.fit(self.X_, self.y_)
+        tmp_nsc = self.nescience_.nescience(tmp_model)
+    
+        decreased = True
+        while (decreased):
+        
+            decreased = False
+            
+            for param in hyper_param:
+                
+                if param=='degree':
+                
+                    # Test degree=degree+1
+                    tmp_model.set_params(**{param: param_value[param]+1})
+                    tmp_model.fit(self.X_, self.y_)
+                    new_nsc = self.nescience_.nescience(tmp_model)
+                    if new_nsc<tmp_nsc:
+                        tmp_nsc = new_nsc
+                        param_value[param] += 1
+                        decreased = True
+                    else:
+					
+                        # Test degree=degree-1
+                        tmp_model.set_params(**{param: param_value[param]-1})
+                        tmp_model.fit(self.X_, self.y_)
+                        new_nsc = self.nescience_.nescience(tmp_model)
+                        if new_nsc<tmp_nsc:
+                            tmp_nsc = new_nsc
+                            decreased = True
+                            param_value[param] -= 1
+                        else:
+				
+                            # Test degree=degree+2
+                            tmp_model.set_params(**{param: param_value[param]+2})
+                            tmp_model.fit(self.X_, self.y_)
+                            new_nsc = self.nescience_.nescience(tmp_model)
+                            if new_nsc<tmp_nsc:
+                                tmp_nsc = new_nsc
+                                param_value[param] += 2
+                                decreased = True
+                            else:
+					
+                                # Test degree=degree-2
+                                tmp_model.set_params(**{param: param_value[param]-2})
+                                tmp_model.fit(self.X_, self.y_)
+                                new_nsc = self.nescience_.nescience(tmp_model)
+                                if new_nsc<tmp_nsc:
+                                    tmp_nsc = new_nsc
+                                    decreased = True
+                                    param_value[param] -= 2
+                                else:
+                                    tmp_model.set_params(**{param: param_value[param]})
+                
+                else: # param = 'C' or 'coef0' or 'gamma'
+                
+                    # Test param=param*2
+                    tmp_model.set_params(**{param: param_value[param]*2})
+                    tmp_model.fit(self.X_, self.y_)
+                    new_nsc = self.nescience_.nescience(tmp_model)
+                    if new_nsc<tmp_nsc:
+                        tmp_nsc = new_nsc
+                        param_value[param] *= 2
+                        decreased = True
+                    else:
+					
+                        # Test param=param/2
+                        tmp_model.set_params(**{param: param_value[param]/2})
+                        tmp_model.fit(self.X_, self.y_)
+                        new_nsc = self.nescience_.nescience(tmp_model)
+                        if new_nsc<tmp_nsc:
+                            tmp_nsc = new_nsc
+                            param_value[param] /= 2
+                            decreased = True
+                        else:
+                            tmp_model.set_params(**{param: param_value[param]})
+                            if param=='coef0':
+							
+                                # Test coef0=-coef0
+                                tmp_model.set_params(**{param: -param_value[param]})
+                                tmp_model.fit(self.X_, self.y_)
+                                new_nsc = self.nescience_.nescience(tmp_model)
+                                if new_nsc<tmp_nsc:
+                                    tmp_nsc = new_nsc
+                                    param_value[param] *= -1
+                                    decreased = True
+                                else:
+                                    tmp_model.set_params(**{param: param_value[param]})
+    
+
+        model = tmp_model.fit(self.X_, self.y_)
+        nsc = tmp_nsc
+        
+        if self.auto==False:
+            self.model_ = model
+            
+        return (nsc, model, None)
 
 
     def DecisionTreeClassifier(self):
@@ -1784,7 +2261,8 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
             if new_nsc < best_nsc:
                 best_nsc   = new_nsc
                 best_model = model
-
+            else:
+                break
         return (best_nsc, best_model, None)
 
     
@@ -1947,9 +2425,9 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
             self.MLPRegressor
         ]
 
-        self.X_, self.y_ = check_X_y(X, y, dtype="numeric")
+        self.X_, self.y_ = check_X_y(X, y, dtype=None)
 
-        self.nescience_ = Nescience()
+        self.nescience_ = Nescience(vartype="regression")
         self.nescience_.fit(self.X_, self.y_)
         
         nsc = 1
@@ -1963,9 +2441,11 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
             for reg in self.regressors_:
             
                 # TODO: Should be based on a verbose flag
-                print("Regressor: " + str(reg))
+                print("Regressor: " + str(reg), end='')
             
                 (new_nsc, new_model, new_viu) = reg()
+                
+                print("Nescience:", new_nsc)
             
                 if new_nsc < nsc:
                     nsc   = new_nsc
@@ -2015,7 +2495,6 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         return self.model_.score(msdX, y)
 
 
-		
     def get_model(self):
         """
         Get access to the private attribute model
@@ -2037,7 +2516,7 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         viu[np.argmax(msd)] = 1        
         msd[np.where(viu)] = -1
 
-        # Evaluate the model        
+        # Evaluate the model
         msdX = self.X_[:,np.where(viu)[0]]        
         model = LinearRegression()
         model.fit(msdX, self.y_)
@@ -2047,7 +2526,7 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         
         decreased = True
         while (decreased):
-                        
+            
             decreased = False
             
             new_msd = msd.copy()
@@ -2096,10 +2575,10 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         previous_nodes = -1
         best_nsc       = 1
         best_model     = None
-
+        
         # For every possible prunning point in reverse order
         for ccp_alpha in reversed(path.ccp_alphas):
-    
+                
             model = DecisionTreeRegressor(ccp_alpha=ccp_alpha, random_state=self.random_state)
             model.fit(self.X_, self.y_)
     
@@ -2110,10 +2589,12 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
             previous_nodes = model.tree_.node_count
     
             new_nsc = self.nescience_.nescience(model)
-    
+            
             if new_nsc < best_nsc:
                 best_nsc   = new_nsc
                 best_model = model
+            else:
+                break
     
         return (best_nsc, best_model, None)       
 
@@ -2148,7 +2629,7 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         # While the nescience decreases
         decreased = True        
         while (decreased):
-            
+                        
             decreased = False
 
             #
@@ -2235,7 +2716,6 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
         # -> end while
 
         return (nsc, nn, viu)
-
 
     # WARNING: Experimental, do not use in production
     # TODO: build a sklearn wrapper around the model
@@ -2396,7 +2876,7 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
 
         return model
 
-
+        
 class AutoTimeSeries(BaseEstimator, RegressorMixin):
     
     # TODO: Class documentation
@@ -2538,7 +3018,7 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
     def AutoRegressive(self):
         
         # Relevance of features
-        msd = self.nescience_.miscoding.miscoding_features()
+        msd = self.nescience_.miscoding_.miscoding_features()
         
         # Variables in use
         viu = np.zeros(self.X_.shape[1], dtype=np.int)
