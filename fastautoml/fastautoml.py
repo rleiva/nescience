@@ -9,6 +9,7 @@ with the minimum nescience principle
 @version:   0.8
 """
 
+import pandas as pd
 import numpy  as np
 
 import warnings
@@ -66,31 +67,17 @@ for classification or regression problems
 Parameters
 ----------
 x1, x2: array-like, shape (n_samples)
-t1, t2: Type of the variable, classification or regression
+numeric1, numeric2: if the variable is numeric or not
        
 Returns
 -------
 A vector with the frequencies of the unique values computed.
 """
-def _unique_count(x1, t1, x2=None, t2=None):
-
-    # Check that types have valid values
-
-    valid_types = ('classification', 'regression')
-
-    if t1 not in valid_types:
-        raise ValueError("Valid options for 't1' are {}. "
-                         "Got vartype={!r} instead."
-                         .format(valid_types, t1))
-
-    if (t2 is not None) and (t2 not in valid_types):
-        raise ValueError("Valid options for 't2' are {}. "
-                         "Got vartype={!r} instead."
-                         .format(valid_types, t2))
+def _unique_count(x1, numeric1, x2=None, numeric2=None):
 
     # Process first variable
 
-    if t1 == "classification":
+    if not numeric1:
 
         # Econde categorical values as numbers
         le = LabelEncoder()
@@ -109,7 +96,7 @@ def _unique_count(x1, t1, x2=None, t2=None):
 
     if x2 is not None:
 
-        if t2 == "classification":
+        if not numeric2:
 
             # Econde categorical values as numbers
             le = LabelEncoder()
@@ -154,6 +141,7 @@ def _discretize_vector(x, dim=1):
     length = x.shape[0]
     new_x  = x.copy().reshape(-1, 1)
 
+    # TODO: Think about this
     # Optimal number of bins
     optimal_bins = int(np.cbrt(length))
 
@@ -214,15 +202,15 @@ or a discretized version of the continuous variables
 Parameters
 ----------
 x1, x2: array-like, shape (n_samples)
-t1, t2: Type of the variable, classification or regression
+numeric1, numeric2: if the variable is numeric or not
        
 Returns
 -------
 Return the length of the encoded dataset (float)
 """
-def _optimal_code_length(x1, t1, x2=None, t2=None):
+def _optimal_code_length(x1, numeric1, x2=None, numeric2=None):
 
-    count = _unique_count(x1=x1, t1=t1, x2=x2, t2=t2)
+    count = _unique_count(x1=x1, numeric1=numeric1, x2=x2, numeric2=numeric2)
     ldm = np.sum(count * ( - np.log2(count / len(x1) )))
     
     return ldm
@@ -253,20 +241,35 @@ class Miscoding(BaseEstimator):
         msd = miscoding.miscoding_features()
     """
 
-    def __init__(self, vartype="classification", redundancy=False):
+    def __init__(self, X_type="numeric", y_type="numeric", redundancy=False):
         """
         Initialization of the class Miscoding
         
         Parameters
         ----------
-        vartype:    The type of the target variables, classification or regression
+        X_type:     The type of the features, numeric, mixed or categorical
+        y_type:     The type of the target, numeric or categorical
         redundancy: if "True" takes into account the redundancy between features
                     to compute the miscoding, if "False" only the miscoding with
                     respect to the target variable is computed.
           
         """        
 
-        self.vartype    = vartype
+        valid_X_types = ("numeric", "mixed", "categorical")
+        valid_y_types = ("numeric", "categorical")
+
+        if X_type not in valid_X_types:
+            raise ValueError("Valid options for 'X_type' are {}. "
+                             "Got vartype={!r} instead."
+                             .format(valid_X_types, X_type))
+
+        if y_type not in valid_y_types:
+            raise ValueError("Valid options for 'y_type' are {}. "
+                             "Got vartype={!r} instead."
+                             .format(valid_y_types, y_type))
+
+        self.X_type     = X_type
+        self.y_type     = y_type
         self.redundancy = redundancy
         
         return None
@@ -281,6 +284,8 @@ class Miscoding(BaseEstimator):
         ----------
         X : array-like, shape (n_samples, n_features)
             Sample vectors from which to compute miscoding.
+            array-like, numpy or pandas array in case of numerical types
+            pandas array in case of mixed or caregorical types
             
         y : array-like, shape (n_samples)
             The target values as numbers or strings.
@@ -289,12 +294,30 @@ class Miscoding(BaseEstimator):
         -------
         self
         """
+
+        if self.X_type == "mixed" or self.X_type == "categorical":
+
+            if isinstance(X, pd.DataFrame):
+                self.X_isnumeric = [np.issubdtype(my_type, np.number) for my_type in X.dtypes]
+            else:
+                raise ValueError("Only DataFrame is allowed for X of type 'mixed' and 'categorical."
+                                 "Got type {!r} instead."
+                                 .format(type(X)))
+                
+        else:
+            self.X_isnumeric = [True] * X.shape[1]
+
+        if self.y_type == "numeric":
+            self.y_isnumeric = True
+        else:
+            self.y_isnumeric = False
         
         self.X_, self.y_ = check_X_y(X, y, dtype=None)
 
-        # Joint miscoding is not supported yet
+        # TODO: Joint miscoding is not supported yet
         self.regular_ = self._miscoding_features_single()
 
+        # TODO: Fix!
         # if self.redundancy:
         #     self.regular_ = self._miscoding_features_joint()
         # else:
@@ -443,12 +466,12 @@ class Miscoding(BaseEstimator):
 
         for i in np.arange(self.X_.shape[1]-1):
             
-            ldm_X1 = _optimal_code_length(x1=self.X_[:,i], t1="regression")
+            ldm_X1 = _optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i])
 
             for j in np.arange(i+1, self.X_.shape[1]):
-                 
-                ldm_X2   = _optimal_code_length(x1=self.X_[:,j], t1="regression")
-                ldm_X1X2 = _optimal_code_length(x1=self.X_[:,i], t1="regression", x2=self.X_[:,j], t2="regression")
+
+                ldm_X2   = _optimal_code_length(x1=self.X_[:,j], numeric1=self.X_isnumeric[j])
+                ldm_X1X2 = _optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], x2=self.X_[:,j], numeric2=self.X_isnumeric[j])
                        
                 mscd = ( ldm_X1X2 - min(ldm_X1, ldm_X2) ) / max(ldm_X1, ldm_X2)
                 
@@ -481,12 +504,12 @@ class Miscoding(BaseEstimator):
                  
         miscoding = list()
                 
-        ldm_y = _optimal_code_length(x1=self.y_, t1=self.vartype)
+        ldm_y = _optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
 
         for i in np.arange(self.X_.shape[1]):
                         
-            ldm_X  = _optimal_code_length(x1=self.X_[:,i], t1="regression")
-            ldm_Xy = _optimal_code_length(x1=self.X_[:,i], t1="regression", x2=self.y_, t2=self.vartype)
+            ldm_X  = _optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i])
+            ldm_Xy = _optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], x2=self.y_, numeric2=self.y_isnumeric)
                        
             mscd = ( ldm_Xy - min(ldm_X, ldm_y) ) / max(ldm_X, ldm_y)
                 
@@ -504,7 +527,7 @@ class Miscoding(BaseEstimator):
     -------
     Return a numpy array with the regular miscodings
     """
-    # TODO: Not supported yet!
+    # TODO: Not supported yet! Review.
     def _miscoding_features_joint(self):
 
         # Compute non-redundant miscoding
@@ -520,14 +543,14 @@ class Miscoding(BaseEstimator):
                
         red_matrix = np.ones([self.X_.shape[1], self.X_.shape[1]])
 
-        ldm_y = _optimal_code_length(x1=self.y_, t1=self.vartype)
+        ldm_y = _optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
 
         for i in np.arange(self.X_.shape[1]-1):
                         
             for j in np.arange(i+1, self.X_.shape[1]):
                 
-                ldm_X1X2  = _optimal_code_length(x1=self.X_[:,i], t1="regression", x2=self.X_[:,j], t2="regression")
-                ldm_X1X2Y = _optimal_code_length(x1=self.X_[:,i], t1="regression", x2=self.y_, t2=self.vartype)
+                ldm_X1X2  = _optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], x2=self.X_[:,j], numeric2=self.X_isnumeric[j])
+                ldm_X1X2Y = _optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], x2=self.y_, numeric2=self.y_isnumeric)
                 
                 tmp = ( ldm_X1X2Y - min(ldm_X1X2, ldm_y) ) / max(ldm_X1X2, ldm_y)
                                 
@@ -728,21 +751,29 @@ class Inaccuracy(BaseEstimator):
 
     """    
 
-    def __init__(self, vartype="classification"):
+    def __init__(self, y_type="numeric"):
         """
-        Initialize the Inaccuracy class
-
+        Initialization of the class Inaccuracy
+        
         Parameters
         ----------
-        vartype: The type of the target variable, classification or regression
+        y_type:     The type of the target, numeric or categorical
+        """        
 
-        Returns
-        -------
-        self
-        """
+        valid_y_types = ("numeric", "categorical")
 
-        self.vartype = vartype
-        
+        if y_type not in valid_y_types:
+            raise ValueError("Valid options for 'y_type' are {}. "
+                             "Got vartype={!r} instead."
+                             .format(valid_y_types, y_type))
+
+        self.y_type = y_type
+
+        if y_type == "numeric":
+            self.y_isnumeric = True
+        else:
+            self.y_isnumeric = False
+
         return None
     
     
@@ -765,8 +796,10 @@ class Inaccuracy(BaseEstimator):
         """
         
         self.X_, self.y_ = check_X_y(X, y, dtype=None)
+
+        self.y_ = np.array(self.y_)
                 
-        self.len_y = _optimal_code_length(x1=self.y_, t1=self.vartype)
+        self.len_y = _optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
         
         return self
 
@@ -787,8 +820,8 @@ class Inaccuracy(BaseEstimator):
         check_is_fitted(self)
         
         Pred      = model.predict(self.X_)
-        len_pred  = _optimal_code_length(x1=Pred, t1=self.vartype)
-        len_joint = _optimal_code_length(x1=Pred, t1=self.vartype, x2=self.y_, t2=self.vartype)
+        len_pred  = _optimal_code_length(x1=Pred, numeric1=self.y_isnumeric)
+        len_joint = _optimal_code_length(x1=Pred, numeric1=self.y_isnumeric, x2=self.y_, numeric2=self.y_isnumeric)
         inacc     = ( len_joint - min(self.len_y, len_pred) ) / max(self.len_y, len_pred)
 
         return inacc 
@@ -809,35 +842,42 @@ class Inaccuracy(BaseEstimator):
         """        
         
         check_is_fitted(self)
+
+        pred = np.array(predictions)
         
-        len_pred  = _optimal_code_length(x1=predictions, t1=self.vartype)
-        len_joint = _optimal_code_length(x1=predictions, t1=self.vartype, x2=self.y_, t2=self.vartype)
+        len_pred  = _optimal_code_length(x1=pred, numeric1=self.y_isnumeric)
+        len_joint = _optimal_code_length(x1=pred, numeric1=self.y_isnumeric, x2=self.y_, numeric2=self.y_isnumeric)
         inacc     = ( len_joint - min(self.len_y, len_pred) ) / max(self.len_y, len_pred)
 
         return inacc    
 
- 
+
 #
 # Class Surfeit
 # 
     
 class Surfeit(BaseEstimator):
-    
-    def __init__(self, vartype="classification", compressor="bz2"):
+
+    def __init__(self, y_type="numeric", compressor="bz2"):
         """
-        Initialize the Surfeit class
+        Initialization of the class Surfeit
 
         Parameters
         ----------
-        vartype:    The type of the target variables, classification or regression
+        y_type:     The type of the target, numeric or categorical
         compressor: The compressor used to encode the model
 
         Returns
         -------
         self
         """
-	
-        self.vartype     = vartype
+	        
+        if y_type == "numeric":
+            self.y_isnumeric = True
+        else:
+            self.y_isnumeric = False
+
+        self.y_type      = y_type   
         self.compressor  = compressor
         
         return None
@@ -861,7 +901,7 @@ class Surfeit(BaseEstimator):
         
         self.X_, self.y_ = check_X_y(X, y, dtype=None)
                 
-        self.len_y_ = _optimal_code_length(x1=self.y_, t1=self.vartype)
+        self.len_y_ = _optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
         
         return self
     
@@ -954,8 +994,6 @@ class Surfeit(BaseEstimator):
     Convert a MultinomialNB classifier into a string
     """
     def _MultinomialNB(self, estimator):
-  
-        
         #
         # Discretize probabilities
         #
@@ -1808,15 +1846,29 @@ class Surfeit(BaseEstimator):
 # 
        
 class Nescience(BaseEstimator):
-    
-    def __init__(self, vartype="classification", compressor="bz2", method="Harmonic"):
-	
-        self.vartype    = vartype
+
+    def __init__(self, X_type="numeric", y_type="numeric", compressor="bz2", method="Harmonic"):
+
+        valid_X_types = ("numeric", "mixed", "categorical")
+        valid_y_types = ("numeric", "categorical")
+
+        if X_type not in valid_X_types:
+            raise ValueError("Valid options for 'X_type' are {}. "
+                             "Got vartype={!r} instead."
+                             .format(valid_X_types, X_type))
+
+        if y_type not in valid_y_types:
+            raise ValueError("Valid options for 'y_type' are {}. "
+                             "Got vartype={!r} instead."
+                             .format(valid_y_types, y_type))
+
+        self.X_type     = X_type
+        self.y_type     = y_type
         self.compressor = compressor
         self.method     = method
-        
+
         return None
-    
+
     
     def fit(self, X, y):
         """
@@ -1842,13 +1894,13 @@ class Nescience(BaseEstimator):
 		
         X, y = check_X_y(X, y, dtype=None)
 
-        self.miscoding_  = Miscoding(vartype=self.vartype, redundancy=False)
+        self.miscoding_  = Miscoding(X_type=self.X_type, y_type=self.y_type, redundancy=False)
         self.miscoding_.fit(X, y)
-        
-        self.inaccuracy_ = Inaccuracy(vartype=self.vartype)
+
+        self.inaccuracy_ = Inaccuracy(y_type=self.y_type)
         self.inaccuracy_.fit(X, y)        
-            
-        self.surfeit_    = Surfeit(vartype=self.vartype, compressor=self.compressor)
+
+        self.surfeit_    = Surfeit(y_type=self.y_type, compressor=self.compressor)
         self.surfeit_.fit(X, y)
         
         return self
@@ -1932,9 +1984,6 @@ class Nescience(BaseEstimator):
             nescience = 3 / ( (1/miscoding) + (1/inaccuracy) + (1/surfeit))
         # else -> rise exception
         
-        # TODO: Remove
-        print("Miscoding:", miscoding, "Inaccuracy:", inaccuracy, "Surfeit:", surfeit, "Nescience:", nescience)
-
         return nescience
 
 
@@ -1980,7 +2029,7 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
         self.X_, self.y_ = check_X_y(X, y, dtype=None)
         # check_classification_targets(self.y_)
 
-        self.nescience_ = Nescience(vartype="classification")
+        self.nescience_ = Nescience(X_type="numeric", y_type="categorical")
         self.nescience_.fit(self.X_, self.y_)
         
         # new y contains class indexes rather than labels in the range [0, n_classes]
@@ -2427,7 +2476,7 @@ class AutoRegressor(BaseEstimator, RegressorMixin):
 
         self.X_, self.y_ = check_X_y(X, y, dtype=None)
 
-        self.nescience_ = Nescience(vartype="regression")
+        self.nescience_ = Nescience(X_type="numeric", y_type="numeric")
         self.nescience_.fit(self.X_, self.y_)
         
         nsc = 1
@@ -2914,7 +2963,7 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
 
         self.X_, self.y_ = self._whereIsTheX(ts)
 
-        self.nescience_ = Nescience()
+        self.nescience_ = Nescience(X_type="numeric", y_type="numeric")
         self.nescience_.fit(self.X_, self.y_)
         
         nsc = 1
@@ -2970,7 +3019,7 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
         Return the predicted value
         """
         
-        check_is_fitted(self, '_X')
+        check_is_fitted(self)
         
         if self.viu_ is None:
             msdX = X
@@ -2994,7 +3043,7 @@ class AutoTimeSeries(BaseEstimator, RegressorMixin):
         Return one minus the mean error
         """
         
-        check_is_fitted(self, '_X')
+        check_is_fitted(self)
 
         X, y = self._whereIsTheX(ts)
         

@@ -9,7 +9,7 @@ def test_redundancy_regular():
     # Feature equal to target
     X = np.arange(100).reshape(-1, 1)
     y = np.arange(100)
-    miscoding = Miscoding(redundancy=False)
+    miscoding = Miscoding(X_type="numeric", y_type="numeric", redundancy=False)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='regular')
     assert mscd == 0
@@ -18,7 +18,7 @@ def test_redundancy_regular():
     X = np.arange(100)
     y = -X
     X = X.reshape(-1, 1)
-    miscoding = Miscoding(redundancy=False)
+    miscoding = Miscoding(X_type="numeric", y_type="numeric", redundancy=False)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='regular')
     assert mscd == 0
@@ -26,7 +26,7 @@ def test_redundancy_regular():
     # Feature and target are not related
     X = np.array([1, 2] * 50).reshape(-1, 1)
     y = ["a"] * 50 + ["b"] * 50
-    miscoding = Miscoding(redundancy=False)
+    miscoding = Miscoding(X_type="numeric", y_type="categorical", redundancy=False)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='regular')
     assert mscd == 1
@@ -36,7 +36,7 @@ def test_redundancy_regular():
     x1 = y + np.random.randn()
     x2 = expon.rvs(size=10000)
     X = np.column_stack((x1, x2))
-    miscoding = Miscoding(redundancy=False)
+    miscoding = Miscoding(X_type="numeric", y_type="numeric", redundancy=False)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='regular')
     assert mscd[0] < mscd[1]
@@ -46,7 +46,7 @@ def test_redundancy_adjusted():
     # Feature equal to target
     X = np.arange(100).reshape(-1, 1)
     y = np.arange(100)
-    miscoding = Miscoding(redundancy=False)
+    miscoding = Miscoding(X_type="numeric", y_type="numeric", redundancy=False)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='adjusted')
     assert mscd == 1
@@ -54,7 +54,7 @@ def test_redundancy_adjusted():
     # Feature and target are not related
     X = np.array([1, 2] * 50).reshape(-1, 1)
     y = ["a"] * 50 + ["b"] * 50
-    miscoding = Miscoding(redundancy=False)
+    miscoding = Miscoding(X_type="numeric", y_type="categorical", redundancy=False)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='adjusted')
     assert mscd == 0
@@ -64,10 +64,10 @@ def test_redundancy_adjusted():
     x1 = y + np.random.randn()
     x2 = expon.rvs(size=10000)
     X = np.column_stack((x1, x2))
-    miscoding = Miscoding(redundancy=False)
+    miscoding = Miscoding(X_type="numeric", y_type="numeric", redundancy=False)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='adjusted')
-    assert np.sum(mscd) == 1
+    assert np.sum(mscd) > 0.99
 
 def test_redundancy_partial():
 
@@ -76,7 +76,7 @@ def test_redundancy_partial():
     x1 = y + np.random.randn()
     x2 = expon.rvs(size=10000)
     X = np.column_stack((x1, x2))
-    miscoding = Miscoding(redundancy=False)
+    miscoding = Miscoding(X_type="numeric", y_type="numeric", redundancy=False)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='partial')
     assert mscd[1] < 0
@@ -88,7 +88,7 @@ def test_featuresmatrix():
     x2 = x1 + np.random.randn()
     x3 = expon.rvs(size=10000)
     X = np.column_stack((x1, x2, x3))
-    miscoding = Miscoding(redundancy=False)
+    miscoding = Miscoding(X_type="numeric", y_type="numeric", redundancy=False)
     miscoding.fit(X, y)
     mscd = miscoding.features_matrix()
     assert mscd[0,1] > mscd[0, 2]
@@ -100,7 +100,7 @@ def test_noredundancy_regular():
     x2 = np.array([5 , 6] * 500)
     X = np.column_stack((x1, x2))
     y = ["a"] * 500 + ["b"] * 500
-    miscoding = Miscoding(redundancy=True)
+    miscoding = Miscoding(X_type="numeric", y_type="categorical", redundancy=True)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='regular')
     assert mscd[0] == 1 
@@ -111,7 +111,7 @@ def test_noredundancy_regular():
     x2 = np.array([5, 6, 7, 8] * 250)
     X = np.column_stack((x1, x2))
     y = ["a"] * 500 + ["b"] * 500
-    miscoding = Miscoding(redundancy=True)
+    miscoding = Miscoding(X_type="numeric", y_type="categorical", redundancy=True)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='regular')
     assert mscd[0] == 1
@@ -122,7 +122,7 @@ def test_noredundancy_regular():
     x2 = np.array([5, 6] * 500)
     X = np.column_stack((x1, x2))
     y = ["a", "b"] * 500
-    miscoding = Miscoding(redundancy=True)
+    miscoding = Miscoding(X_type="numeric", y_type="categorical", redundancy=True)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='regular')
     assert mscd[0] == 0.5
@@ -133,7 +133,7 @@ def test_noredundancy_regular():
     x2 = np.array([5, 6, 7, 8] * 250)
     X = np.column_stack((x1, x2))
     y = ["a", "b", "c", "d"] * 250
-    miscoding = Miscoding(redundancy=True)
+    miscoding = Miscoding(X_type="numeric", y_type="categorical", redundancy=True)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='regular')
     assert mscd[0] == 0
@@ -146,10 +146,10 @@ def test_noredundancy_adjusted():
     x1 = y + np.random.randn()
     x2 = expon.rvs(size=10000)
     X = np.column_stack((x1, x2))
-    miscoding = Miscoding(redundancy=False)
+    miscoding = Miscoding(X_type="numeric", y_type="numeric", redundancy=False)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='adjusted')
-    assert np.sum(mscd) == 1
+    assert np.sum(mscd) > 0.99
 
 def test_noredundancy_partial():
 
@@ -158,7 +158,7 @@ def test_noredundancy_partial():
     x1 = y + np.random.randn()
     x2 = expon.rvs(size=10000)
     X = np.column_stack((x1, x2))
-    miscoding = Miscoding(redundancy=False)
+    miscoding = Miscoding(X_type="numeric", y_type="numeric", redundancy=False)
     miscoding.fit(X, y)
     mscd = miscoding.miscoding_features(mode='partial')
     assert mscd[1] < 0
