@@ -3260,10 +3260,7 @@ class IncompressibleClassifier():
     def clusters(self, n_clusters="Auto", filter_inertia=True, filter_repeated_attrs=True, filter_balancedness=True, filter_miscoding=True):
 
         # TODO: Check that the class is fitted
-
         # TODO: Allow to change the dimension of the cluster
-        # TODO: Implement a filter based on miscoding
-        # TODO: Implement a filter based on balancedness
 
         nis = len(self.incompressible)
 
@@ -3290,42 +3287,82 @@ class IncompressibleClassifier():
                 tmp_df = pd.DataFrame([{"Attribute 1": i, "Attribute 2": j, "Cluster": km_model, "Inertia": km_model.inertia_}])
                 df = df.append(tmp_df, ignore_index=True)
 
+        # TODO: Implement a filter based on Inertia
+
         # Filter repeated attributes
 
         if filter_repeated_attrs:
 
             attr_in_use = list()
-            final_df    = pd.DataFrame(columns = ["Attribute 1", "Attribute 2", "Cluster", "Inertia"])
+            filtered_df = pd.DataFrame(columns = ["Attribute 1", "Attribute 2", "Cluster", "Inertia"])
 
             for index, row in df.sort_values(by=['Inertia']).iterrows():
     
                 if (row["Attribute 1"] in attr_in_use) or (row["Attribute 2"] in attr_in_use):
-                   continue
+                    continue
         
                 attr_in_use.append(row["Attribute 1"])
                 attr_in_use.append(row["Attribute 2"])
     
-                tmp_df    = pd.DataFrame([{"Attribute 1": row["Attribute 1"], "Attribute 2": row["Attribute 2"], "Cluster": row["Cluster"], "Inertia": row["Inertia"]}])
-                final_df = final_df.append(tmp_df, ignore_index=True)
+                tmp_df      = pd.DataFrame([{"Attribute 1": row["Attribute 1"], "Attribute 2": row["Attribute 2"], "Cluster": row["Cluster"], "Inertia": row["Inertia"]}])
+                filtered_df = filtered_df.append(tmp_df, ignore_index=True)
+
+            df = filtered_df
 
         # Filter non-balanced clusters
 
         if filter_balancedness:
 
-            filter_ratio_low   = 0.2
-            filter_ration_high = 0.8
+            filter_ratio_low  = 0.2
+            filter_ratio_high = 0.8
 
-            for index, row in df.sort_values(by=['Inertia']).iterrows():
+            filtered_df = pd.DataFrame(columns = ["Attribute 1", "Attribute 2", "Cluster", "Inertia"])
 
-                # "N Class 0":np.sum(y_pred==0), "N Class 1":np.sum(y_pred==1
-                # df["Ratio"] = df["N Class 0"] / (df["N Class 0"] + df["N Class 1"])
-                # 
-                # if row['Ratio'] < filter_ratio_low:
-                #    continue
-                # 
-                # if row['Ratio'] > filter_ration_high:
-                #     continue
+            for index, row in df.iterrows():
 
-        return final_df
+                new_X = self.X_[np.ix_(self.incompressible,[row["Attribute 1"], row["Attribute 2"]])]
+                
+                km_model = row["Cluster"]
+                y_pred = km_model.predict(new_X)
+
+                n_class_0 = np.sum(y_pred == 0)
+                n_class_1 = np.sum(y_pred == 1)
+
+                ratio = n_class_0 / (n_class_0 + n_class_1)
+
+                if ratio < filter_ratio_low:
+                    continue
+
+                if ratio > filter_ratio_high:
+                    continue
+
+                tmp_df      = pd.DataFrame([{"Attribute 1": row["Attribute 1"], "Attribute 2": row["Attribute 2"], "Cluster": row["Cluster"], "Inertia": row["Inertia"]}])
+                filtered_df = filtered_df.append(tmp_df, ignore_index=True)
+
+            df = filtered_df
+
+        # Filter attributes highly related
+
+        if filter_miscoding:
+
+            filtered_df = pd.DataFrame(columns = ["Attribute 1", "Attribute 2", "Cluster", "Inertia"])
+
+            filter_miscoding  = 0.2
+
+            mscd = Miscoding()
+            mscd.fit(self.X_, self.y_)
+            matrix = mscd.features_matrix()
+
+            for index, row in df.iterrows():
+
+                if matrix[row["Attribute 1"], row["Attribute 2"]] > filter_miscoding:
+                    continue
+
+                tmp_df      = pd.DataFrame([{"Attribute 1": row["Attribute 1"], "Attribute 2": row["Attribute 2"], "Cluster": row["Cluster"], "Inertia": row["Inertia"]}])
+                filtered_df = filtered_df.append(tmp_df, ignore_index=True)
+
+            df = filtered_df
+
+        return df
 
 
