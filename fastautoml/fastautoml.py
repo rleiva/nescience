@@ -369,6 +369,71 @@ class Miscoding(BaseEstimator):
 
         return None 
 
+    
+    def cross_miscoding(self, attribute, min_lag=0, max_lag=None, mode='adjusted'):
+
+        check_is_fitted(self)
+
+        valid_modes = ('regular', 'adjusted', 'partial')
+
+        if mode not in valid_modes:
+            raise ValueError("Valid options for 'mode' are {}. "
+                             "Got mode={!r} instead."
+                            .format(valid_modes, mode))
+        
+        lag_mscd = list()
+        
+        # Use a default value for those lazy programmers
+        if max_lag == None:
+            max_lag = int(np.sqrt(self.X_.shape[0]))
+
+        for i in np.arange(start=min_lag, stop=max_lag):
+
+            # Compute lagged vectors
+            new_y = self.y_.copy()
+            new_y = np.roll(new_y, -i)
+            new_y = new_y[:-i]
+
+            new_x = self.X_[:,attribute].copy()
+            new_x = new_x[:-i]
+
+            ldm_y  = _optimal_code_length(x1=new_y, numeric1=self.y_isnumeric)
+            ldm_X  = _optimal_code_length(x1=new_x, numeric1=self.X_isnumeric[attribute])
+            ldm_Xy = _optimal_code_length(x1=new_x, numeric1=self.X_isnumeric[attribute], x2=new_y, numeric2=self.y_isnumeric)
+                       
+            mscd = ( ldm_Xy - min(ldm_X, ldm_y) ) / max(ldm_X, ldm_y)
+                
+            lag_mscd.append(mscd)
+                
+        regular = np.array(lag_mscd)
+
+        if mode == 'regular':
+
+            return regular
+
+        elif mode == 'adjusted':
+
+            adjusted = 1 - regular
+            if np.sum(adjusted) != 0:
+                adjusted = adjusted / np.sum(adjusted)
+            
+            return adjusted
+
+        elif mode == 'partial':
+
+            if np.sum(regular) != 0:
+                partial  = adjusted - regular / np.sum(regular)
+            else:
+                partial  = adjusted
+
+            return partial
+
+        else:
+
+            raise ValueError("Valid options for 'mode' are {}. "
+                             "Got mode={!r} instead."
+                            .format(valid_modes, mode))
+
 
     def miscoding_model(self, model):
         """
