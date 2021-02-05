@@ -19,6 +19,7 @@ import re
 from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin														
 														
 from sklearn.utils            import check_X_y
+from sklearn.utils            import column_or_1d
 from sklearn.utils            import check_array
 from sklearn.utils.validation import check_is_fitted
 from sklearn.utils.multiclass import check_classification_targets
@@ -74,7 +75,7 @@ Returns
 -------
 A vector with the frequencies of the unique values computed.
 """
-def _unique_count(x1, numeric1, x2=None, numeric2=None):
+def _unique_count(x1, numeric1, x2=None, numeric2=None, x3=None, numeric3=None):
 
     # Process first variable
 
@@ -86,12 +87,7 @@ def _unique_count(x1, numeric1, x2=None, numeric2=None):
         x1 = le.transform(x1)
 
     else:
-
-        # Discretize variable
-        if x2 is not None:
-            x1 = _discretize_vector(x1, dim=1)
-        else:
-            x1 = _discretize_vector(x1, dim=2)            
+        x1 = _discretize_vector(x1)
 
     # Process second variable
 
@@ -107,16 +103,35 @@ def _unique_count(x1, numeric1, x2=None, numeric2=None):
         else:
 
             # Discretize variable
-            x2 = _discretize_vector(x2, dim=2)
+            x2 = _discretize_vector(x2)
 
         x = (x1 + x2) * (x1 + x2 + 1) / 2 + x2
         x = x.astype(int)
+
+        # Process third variable
+
+        if x3 is not None:
+
+            if not numeric3:
+
+                # Econde categorical values as numbers
+                le = LabelEncoder()
+                le.fit(x3)
+                x3 = le.transform(x3)
+
+            else:
+
+                # Discretize variable
+                x3 = _discretize_vector(x3)
+
+            x = (x + x3) * (x + x3 + 1) / 2 + x3
+            x = x.astype(int)
 
     else:
         
         x = x1
 
-    # Return count        
+    # Return count
     
     y     = np.bincount(x)
     ii    = np.nonzero(y)[0]
@@ -131,26 +146,18 @@ Discretize a continous variable using a "uniform" strategy
 Parameters
 ----------
 x  : array-like, shape (n_samples)
-dim: Number of dimensions of space
        
 Returns
 -------
 A new discretized vector of integers.
 """
-def _discretize_vector(x, dim=1):
+def _discretize_vector(x):
 
     length = x.shape[0]
     new_x  = x.copy().reshape(-1, 1)
 
-    # TODO: Think about this
     # Optimal number of bins
     optimal_bins = int(np.cbrt(length))
-
-    # TODO: Think about this
-    # if dim == 1:
-    #     optimal_bins = int(np.sqrt(length))
-    # else:
-    #     optimal_bins = int(np.sqrt(np.sqrt(length)))
     
     # Correct the number of bins if it is too small
     if optimal_bins <= 1:
@@ -202,16 +209,16 @@ or a discretized version of the continuous variables
     
 Parameters
 ----------
-x1, x2: array-like, shape (n_samples)
-numeric1, numeric2: if the variable is numeric or not
+x1, x2, x3: array-like, shape (n_samples)
+numeric1, numeric2, numeric3: if the variable is numeric or not
        
 Returns
 -------
 Return the length of the encoded dataset (float)
 """
-def _optimal_code_length(x1, numeric1, x2=None, numeric2=None):
+def optimal_code_length(x1, numeric1, x2=None, numeric2=None, x3=None, numeric3=None):
 
-    count = _unique_count(x1=x1, numeric1=numeric1, x2=x2, numeric2=numeric2)
+    count = _unique_count(x1=x1, numeric1=numeric1, x2=x2, numeric2=numeric2, x3=x3, numeric3=numeric3)
     ldm = np.sum(count * ( - np.log2(count / len(x1) )))
     
     return ldm
@@ -276,7 +283,7 @@ class Miscoding(BaseEstimator):
         return None
     
     
-    def fit(self, X, y):
+    def fit(self, X, y=None):
         """
         Learn empirically the miscoding of the features of X
         as a representation of y.
@@ -288,13 +295,15 @@ class Miscoding(BaseEstimator):
             array-like, numpy or pandas array in case of numerical types
             pandas array in case of mixed or caregorical types
             
-        y : array-like, shape (n_samples)
+        y : (optional) array-like, shape (n_samples)
             The target values as numbers or strings.
             
         Returns
         -------
         self
         """
+
+        self.X_ = check_array(X)
 
         if self.X_type == "mixed" or self.X_type == "categorical":
 
@@ -308,32 +317,41 @@ class Miscoding(BaseEstimator):
         else:
             self.X_isnumeric = [True] * X.shape[1]
 
-        if self.y_type == "numeric":
-            self.y_isnumeric = True
-        else:
-            self.y_isnumeric = False
+        if y is not None:
+
+            self.y_ = column_or_1d(y)
+
+            # Miscoding wrt the target is computed only if we have a target
+
+            if self.y_type == "numeric":
+                self.y_isnumeric = True
+            else:
+                self.y_isnumeric = False
         
-        self.X_, self.y_ = check_X_y(X, y, dtype=None)
+            if self.redundancy:
+                self.regular_ = self._miscoding_features_joint()
+            else:
+                self.regular_ = self._miscoding_features_single()
 
-        # TODO: Joint miscoding is not supported yet
-        self.regular_ = self._miscoding_features_single()
+            self.adjusted_ = 1 - self.regular_
 
-        # TODO: Fix!
-        # if self.redundancy:
-        #     self.regular_ = self._miscoding_features_joint()
-        # else:
-        #     self.regular_ = self._miscoding_features_single()
+            if np.sum(self.adjusted_) != 0:
+                self.adjusted_ = self.adjusted_ / np.sum(self.adjusted_)
 
-        self.adjusted_ = 1 - self.regular_
-
-        if np.sum(self.adjusted_) != 0:
-            self.adjusted_ = self.adjusted_ / np.sum(self.adjusted_)
-
-        if np.sum(self.regular_) != 0:
-            self.partial_  = self.adjusted_ - self.regular_ / np.sum(self.regular_)
-        else:
-            self.partial_  = self.adjusted_
+            if np.sum(self.regular_) != 0:
+                self.partial_  = self.adjusted_ - self.regular_ / np.sum(self.regular_)
+            else:
+                self.partial_  = self.adjusted_
         
+        else:
+
+            self.X_ = column_or_1d(X)
+            self.y_isnumeric = self.X_isnumeric[0]
+
+            self.regular_  = []
+            self.adjusted_ = []
+            self.partial_  = []
+
         return self
 
 
@@ -369,8 +387,50 @@ class Miscoding(BaseEstimator):
 
         return None 
 
+
+    def auto_miscoding(self, attribute, min_lag=1, max_lag=None, mode='adjusted'):
+        """
+        Return the auto-miscoding of an attribute, for a number or lags
+
+        Parameters
+        ----------
+        attribute : the attribute to study
+        min_lag    : starting lag
+        max_lag    : end lag. If none, the squared root of the number of samples is used.
+        mode       : the mode of miscoding, possible values are 'regular' for
+                     the true miscoding, 'adjusted' for the normalized inverted
+                     values, and 'partial' with positive and negative
+                     contributions to dataset miscoding.
+            
+        Returns
+        -------
+        Return a numpy array with the lagged miscodings
+        """
+
+        return self.cross_miscoding(attribute1=attribute, min_lag=min_lag, max_lag=max_lag, mode=mode)
+
     
-    def cross_miscoding(self, attribute, min_lag=0, max_lag=None, mode='adjusted'):
+    def cross_miscoding(self, attribute1, attribute2=None, min_lag=1, max_lag=None, mode='adjusted'):
+        """
+        Return the cross-miscoding of the target given a feature, for a number or lags
+
+        Parameters
+        ----------
+        attribute1 : the explanatory attribute
+        attribute2 : the rolling attribute. If None, the target y will be used instead.
+        min_lag    : starting lag
+        max_lag    : end lag. If none, the squared root of the number of samples is used.
+        mode       : the mode of miscoding, possible values are 'regular' for
+                     the true miscoding, 'adjusted' for the normalized inverted
+                     values, and 'partial' with positive and negative
+                     contributions to dataset miscoding.
+            
+        Returns
+        -------
+        Return a numpy array with the lagged miscodings
+        """        
+
+        # TODO: If min_lag <= 0 rise error
 
         check_is_fitted(self)
 
@@ -390,16 +450,27 @@ class Miscoding(BaseEstimator):
         for i in np.arange(start=min_lag, stop=max_lag):
 
             # Compute lagged vectors
-            new_y = self.y_.copy()
+            if attribute2 is not None:
+                new_y = self.y_.copy()
+            else:
+                new_y = self.X_[:,attribute2].copy()
             new_y = np.roll(new_y, -i)
             new_y = new_y[:-i]
 
-            new_x = self.X_[:,attribute].copy()
+            if self.X_.ndim == 1:
+                new_x = self.X_.copy()
+            else:
+                new_x = self.X_[:,attribute1].copy()
             new_x = new_x[:-i]
 
-            ldm_y  = _optimal_code_length(x1=new_y, numeric1=self.y_isnumeric)
-            ldm_X  = _optimal_code_length(x1=new_x, numeric1=self.X_isnumeric[attribute])
-            ldm_Xy = _optimal_code_length(x1=new_x, numeric1=self.X_isnumeric[attribute], x2=new_y, numeric2=self.y_isnumeric)
+            ldm_X  = optimal_code_length(x1=new_x, numeric1=self.X_isnumeric[attribute1])
+
+            if attribute2 is None:
+                ldm_y  = optimal_code_length(x1=new_y, numeric1=self.y_isnumeric)
+                ldm_Xy = optimal_code_length(x1=new_x, numeric1=self.X_isnumeric[attribute1], x2=new_y, numeric2=self.y_isnumeric)
+            else:
+                ldm_y  = optimal_code_length(x1=new_y, numeric1=self.X_isnumeric[attribute2])
+                ldm_Xy = optimal_code_length(x1=new_x, numeric1=self.X_isnumeric[attribute1], x2=new_y, numeric2=self.X_isnumeric[attribute2])
                        
             mscd = ( ldm_Xy - min(ldm_X, ldm_y) ) / max(ldm_X, ldm_y)
                 
@@ -435,13 +506,17 @@ class Miscoding(BaseEstimator):
                             .format(valid_modes, mode))
 
 
-    def miscoding_model(self, model):
+    def miscoding_model(self, model, mode='partial'):
         """
-        Compute the partial joint miscoding of the dataset used by a model
+        Compute the joint miscoding of the dataset used by a model
         
         Parameters
         ----------
         model : a model of one of the supported classes
+        mode  : the mode of miscoding, possible values are 'regular' for
+                the true miscoding, 'adjusted' for the normalized inverted
+                values, and 'partial' with positive and negative
+                contributions to dataset miscoding.
                     
         Returns
         -------
@@ -449,6 +524,13 @@ class Miscoding(BaseEstimator):
         """
 
         check_is_fitted(self)
+
+        valid_modes = ('adjusted', 'partial')
+
+        if mode not in valid_modes:
+            raise ValueError("Valid options for 'mode' are {}. "
+                             "Got mode={!r} instead."
+                            .format(valid_modes, mode))
 
         if isinstance(model, MultinomialNB):
             subset = self._MultinomialNB(model)
@@ -473,29 +555,43 @@ class Miscoding(BaseEstimator):
             raise NotImplementedError('Model {!r} not supported'
                                      .format(type(model)))
 
-        return self.miscoding_subset(subset)
+        return self.miscoding_subset(subset, mode)
         
 
-    def miscoding_subset(self, subset):
+    def miscoding_subset(self, subset, mode='partial'):
         """
-        Compute the partial joint miscoding of a subset of the features
+        Compute the joint miscoding of a subset of the features
         
         Parameters
         ----------
         subset : array-like, shape (n_features)
                  1 if the attribute is in use, 0 otherwise
+        mode   : the mode of miscoding, possible values are 'adjusted' for
+                 the normalized inverted values and 'partial' with positive
+                 and negative contributions to dataset miscoding.                 
         
         Returns
         -------
         Return the miscoding (float)
         """
 
+        valid_modes = ('adjusted', 'partial')
+
         check_is_fitted(self)
 
-        # Avoid miscoding greater than 1
-        top_mscd = 1 + np.sum(self.partial_[self.partial_ < 0])
-        miscoding = top_mscd - np.dot(subset, self.partial_)
+        if mode == 'adjusted':
+            miscoding = 1 - np.dot(subset, self.adjusted_)
+
+        elif mode == 'partial':
+            # Avoid miscoding greater than 1
+            top_mscd = 1 + np.sum(self.partial_[self.partial_ < 0])
+            miscoding = top_mscd - np.dot(subset, self.partial_)
                 
+        else:
+            raise ValueError("Valid options for 'mode' are {}. "
+                             "Got mode={!r} instead."
+                            .format(valid_modes, mode))
+
         # Avoid miscoding smaller than zero
         if miscoding < 0:
             miscoding = 0
@@ -532,12 +628,12 @@ class Miscoding(BaseEstimator):
 
         for i in np.arange(self.X_.shape[1]-1):
             
-            ldm_X1 = _optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i])
+            ldm_X1 = optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i])
 
             for j in np.arange(i+1, self.X_.shape[1]):
 
-                ldm_X2   = _optimal_code_length(x1=self.X_[:,j], numeric1=self.X_isnumeric[j])
-                ldm_X1X2 = _optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], x2=self.X_[:,j], numeric2=self.X_isnumeric[j])
+                ldm_X2   = optimal_code_length(x1=self.X_[:,j], numeric1=self.X_isnumeric[j])
+                ldm_X1X2 = optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], x2=self.X_[:,j], numeric2=self.X_isnumeric[j])
                        
                 mscd = ( ldm_X1X2 - min(ldm_X1, ldm_X2) ) / max(ldm_X1, ldm_X2)
                 
@@ -570,12 +666,12 @@ class Miscoding(BaseEstimator):
                  
         miscoding = list()
                 
-        ldm_y = _optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
+        ldm_y = optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
 
         for i in np.arange(self.X_.shape[1]):
                         
-            ldm_X  = _optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i])
-            ldm_Xy = _optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], x2=self.y_, numeric2=self.y_isnumeric)
+            ldm_X  = optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i])
+            ldm_Xy = optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], x2=self.y_, numeric2=self.y_isnumeric)
                        
             mscd = ( ldm_Xy - min(ldm_X, ldm_y) ) / max(ldm_X, ldm_y)
                 
@@ -609,14 +705,14 @@ class Miscoding(BaseEstimator):
                
         red_matrix = np.ones([self.X_.shape[1], self.X_.shape[1]])
 
-        ldm_y = _optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
+        ldm_y = optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
 
         for i in np.arange(self.X_.shape[1]-1):
                         
             for j in np.arange(i+1, self.X_.shape[1]):
                 
-                ldm_X1X2  = _optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], x2=self.X_[:,j], numeric2=self.X_isnumeric[j])
-                ldm_X1X2Y = _optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], x2=self.y_, numeric2=self.y_isnumeric)
+                ldm_X1X2  = optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], x2=self.X_[:,j], numeric2=self.X_isnumeric[j])
+                ldm_X1X2Y = optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], x2=self.X_[:,j], numeric2=self.X_isnumeric[j], x3=self.y_, numeric3=self.y_isnumeric)
                 
                 tmp = ( ldm_X1X2Y - min(ldm_X1X2, ldm_y) ) / max(ldm_X1X2, ldm_y)
                                 
@@ -634,10 +730,6 @@ class Miscoding(BaseEstimator):
         
         loc1, loc2 = np.unravel_index(np.argmin(red_matrix, axis=None), red_matrix.shape)
         jmscd1 = jmscd2 = red_matrix[loc1, loc2]
-
-        # Avoid the case of selecting a member of the main diagonal
-        if loc1 == loc2:
-            loc2 = loc2 + 1
         
         viu[loc1] = 1
         viu[loc2] = 1
@@ -865,7 +957,7 @@ class Inaccuracy(BaseEstimator):
 
         self.y_ = np.array(self.y_)
                 
-        self.len_y = _optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
+        self.len_y = optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
         
         return self
 
@@ -886,8 +978,8 @@ class Inaccuracy(BaseEstimator):
         check_is_fitted(self)
         
         Pred      = model.predict(self.X_)
-        len_pred  = _optimal_code_length(x1=Pred, numeric1=self.y_isnumeric)
-        len_joint = _optimal_code_length(x1=Pred, numeric1=self.y_isnumeric, x2=self.y_, numeric2=self.y_isnumeric)
+        len_pred  = optimal_code_length(x1=Pred, numeric1=self.y_isnumeric)
+        len_joint = optimal_code_length(x1=Pred, numeric1=self.y_isnumeric, x2=self.y_, numeric2=self.y_isnumeric)
         inacc     = ( len_joint - min(self.len_y, len_pred) ) / max(self.len_y, len_pred)
 
         return inacc 
@@ -911,8 +1003,8 @@ class Inaccuracy(BaseEstimator):
 
         pred = np.array(predictions)
         
-        len_pred  = _optimal_code_length(x1=pred, numeric1=self.y_isnumeric)
-        len_joint = _optimal_code_length(x1=pred, numeric1=self.y_isnumeric, x2=self.y_, numeric2=self.y_isnumeric)
+        len_pred  = optimal_code_length(x1=pred, numeric1=self.y_isnumeric)
+        len_joint = optimal_code_length(x1=pred, numeric1=self.y_isnumeric, x2=self.y_, numeric2=self.y_isnumeric)
         inacc     = ( len_joint - min(self.len_y, len_pred) ) / max(self.len_y, len_pred)
 
         return inacc    
@@ -967,7 +1059,7 @@ class Surfeit(BaseEstimator):
         
         self.X_, self.y_ = check_X_y(X, y, dtype=None)
                 
-        self.len_y_ = _optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
+        self.len_y_ = optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
         
         return self
     

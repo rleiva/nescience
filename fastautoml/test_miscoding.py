@@ -1,4 +1,6 @@
-from fastautoml.fastautoml import Miscoding
+# Run tests with pytest
+
+from fastautoml.miscoding import Miscoding
 
 import numpy as np
 from scipy.stats import norm, expon
