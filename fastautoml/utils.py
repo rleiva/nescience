@@ -88,14 +88,14 @@ for classification or regression problems
     
 Parameters
 ----------
-x1, x2: array-like, shape (n_samples)
-numeric1, numeric2: if the variable is numeric or not
+x1, x2, x3: array-like, shape (n_samples)
+numeric1, numeric2, numeric3: if the variable is numeric or not
        
 Returns
 -------
 A vector with the frequencies of the unique values computed.
 """
-def unique_count(x1, numeric1, x2=None, numeric2=None):
+def unique_count(x1, numeric1, x2=None, numeric2=None, x3=None, numeric3=None):
 
     # Process first variable
 
@@ -128,6 +128,25 @@ def unique_count(x1, numeric1, x2=None, numeric2=None):
         x = (x1 + x2) * (x1 + x2 + 1) / 2 + x2
         x = x.astype(int)
 
+        # Process third variable
+
+        if x3 is not None:
+
+            if not numeric3:
+
+                # Econde categorical values as numbers
+                le = LabelEncoder()
+                le.fit(x3)
+                x3 = le.transform(x3)
+
+            else:
+
+                # Discretize variable
+                x3 = discretize_vector(x3)
+
+            x = (x + x3) * (x + x3 + 1) / 2 + x3
+            x = x.astype(int)        
+
     else:
         
         x = x1
@@ -149,16 +168,16 @@ or a discretized version of the continuous variables
     
 Parameters
 ----------
-x1, x2: array-like, shape (n_samples)
-numeric1, numeric2: if the variable is numeric or not
-       
+x1, x2, x3: array-like, shape (n_samples)
+numeric1, numeric2, numeric3: if the variable is numeric or not
+
 Returns
 -------
 Return the length of the encoded dataset (float)
 """
-def optimal_code_length(x1, numeric1, x2=None, numeric2=None):
+def optimal_code_length(x1, numeric1, x2=None, numeric2=None, x3=None, numeric3=None):
 
-    count = unique_count(x1=x1, numeric1=numeric1, x2=x2, numeric2=numeric2)
+    count = unique_count(x1=x1, numeric1=numeric1, x2=x2, numeric2=numeric2, x3=x3, numeric3=numeric3)
     ldm = np.sum(count * ( - np.log2(count / len(x1) )))
     
     return ldm
