@@ -32,13 +32,16 @@ Returns
 -------
 A new discretized vector of integers.
 """
-def discretize_vector(x):
+def discretize_vector(x, n_bins=None):
 
     length = x.shape[0]
     new_x  = x.copy().reshape(-1, 1)
 
     # Optimal number of bins
-    optimal_bins = int(np.cbrt(length))
+    if n_bins is None:
+        optimal_bins = int(np.cbrt(length))
+    else:
+        optimal_bins = n_bins
     
     # Correct the number of bins if it is too small
     if optimal_bins <= 1:
@@ -70,8 +73,9 @@ def discretize_vector(x):
 
         if actual_bins < optimal_bins:
             # Too few intervals with data
+            add_bins      = optimal_bins - actual_bins
             previous_bins = actual_bins
-            add_bins      = int( np.round( (length * (1 - actual_bins / optimal_bins)) / optimal_bins ) )
+            # add_bins      = int( np.round( (length * (1 - actual_bins / optimal_bins)) / optimal_bins ) )
             total_bins    = total_bins + add_bins
         else:
             # All intervals have data
