@@ -797,12 +797,12 @@ class Surfeit(BaseEstimator):
     """
     def _LinearRegression(self, estimator):
 
-        #
         # Retrieve weigths
-        #
                 
         coefs     = estimator.coef_
         intercept = estimator.intercept_
+
+        coefs = discretize_vector(coefs, n_bins=int(np.sqrt(len(coefs)))) 
         
         # Header
         string = "def LinearRegression(X):\n"
