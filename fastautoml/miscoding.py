@@ -117,18 +117,18 @@ class Miscoding(BaseEstimator):
         self
         """
 
-        self.X_ = check_array(X)
-
         if self.X_type == "mixed" or self.X_type == "categorical":
 
             if isinstance(X, pd.DataFrame):
                 self.X_isnumeric = [np.issubdtype(my_type, np.number) for my_type in X.dtypes]
+                self.X_ = np.array(X)
             else:
                 raise ValueError("Only DataFrame is allowed for X of type 'mixed' and 'categorical."
                                  "Got type {!r} instead."
                                  .format(type(X)))
                 
         else:
+            self.X_ = check_array(X)
             self.X_isnumeric = [True] * X.shape[1]
 
         if y is not None:

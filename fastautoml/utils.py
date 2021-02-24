@@ -32,14 +32,16 @@ Returns
 -------
 A new discretized vector of integers.
 """
-def discretize_vector(x):
+def discretize_vector(x, n_bins=None):
 
     length = x.shape[0]
     new_x  = x.copy().reshape(-1, 1)
 
-    # Compute the optimal number of bins
-    # TODO: It should be sqrt for single variables
-    optimal_bins = int(np.cbrt(length))
+    # Optimal number of bins
+    if n_bins is None:
+        optimal_bins = int(np.cbrt(length))
+    else:
+        optimal_bins = n_bins
     
     # Correct the number of bins if it is too small
     if optimal_bins <= 1:
@@ -64,6 +66,10 @@ def discretize_vector(x):
 
         y = np.bincount(tmp_x)
         actual_bins = len(np.nonzero(y)[0])
+
+        if n_bins is not None:
+            # If the number of bins is fixed, stop here
+            stop = True
 
         if previous_bins == actual_bins:
             # Nothing changed, better stop here
@@ -97,7 +103,7 @@ Returns
 -------
 A vector with the frequencies of the unique values computed.
 """
-def unique_count(x1, numeric1, x2=None, numeric2=None, x3=None, numeric3=None):
+def unique_count(x1, numeric1, x2=None, numeric2=None, x3=None, numeric3=None, n_bins=None):
 
     # Process first variable
 
@@ -109,7 +115,7 @@ def unique_count(x1, numeric1, x2=None, numeric2=None, x3=None, numeric3=None):
         x1 = le.transform(x1)
 
     else:
-        x1 = discretize_vector(x1)
+        x1 = discretize_vector(x1, n_bins=n_bins)
 
     # Process second variable
 
@@ -154,10 +160,12 @@ def unique_count(x1, numeric1, x2=None, numeric2=None, x3=None, numeric3=None):
         x = x1
 
     # Return count
-    
-    y     = np.bincount(x)
-    ii    = np.nonzero(y)[0]
-    count = y[ii]
+    if n_bins is None:
+        y     = np.bincount(x)
+        ii    = np.nonzero(y)[0]
+        count = y[ii]
+    else:
+        vals, counts = np.unique(x, return_counts=True)
 
     return count
 
@@ -177,9 +185,13 @@ Returns
 -------
 Return the length of the encoded dataset (float)
 """
-def optimal_code_length(x1, numeric1, x2=None, numeric2=None, x3=None, numeric3=None):
+def optimal_code_length(x1, numeric1, x2=None, numeric2=None, x3=None, numeric3=None, n_bins=None):
 
-    count = unique_count(x1=x1, numeric1=numeric1, x2=x2, numeric2=numeric2, x3=x3, numeric3=numeric3)
+    count = unique_count(x1=x1, numeric1=numeric1, x2=x2, numeric2=numeric2, x3=x3, numeric3=numeric3, n_bins=n_bins)
+
+    if n_bins is not None:
+        count = count[count != 0]
+
     ldm = np.sum(count * ( - np.log2(count / len(x1) )))
     
     return ldm

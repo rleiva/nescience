@@ -136,15 +136,35 @@ class Causality(BaseEstimator):
             # Counts, length, and Kolmogorov complexity for X_i 
             Cx = unique_count(x1=self.X_[:,i], numeric1=self.X_isnumeric[i])
             Lx = - np.log2(Cx / np.sum(Cx))
-            Kx = optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
+            Kx = optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i])
 
-            if Cy.shape != Cx.shape:
-                # TODO: Elements are not comparable
+            # Check if elements are not comparable
+            if Cy.shape[0] != Cx.shape[0]:
                 Penalties_xy.append(np.nan)
                 Penalties_yx.append(np.nan)
                 continue
-            
+ 
+            #     if Cy.shape[0] < Cx.shape[0]:
+            #         Cx = unique_count(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], n_bins=Cy.shape[0])
+            #         Lx = - np.log2(Cx / np.sum(Cx))
+            #         Kx = optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], n_bins=Cy.shape[0])
+            #     else:
+            #         Cy_adapted = unique_count(x1=self.y_, numeric1=self.y_isnumeric, n_bins=Cx.shape[0])
+            #         Ly_adapted = - np.log2(Cy_adapted / np.sum(Cy_adapted))
+            #         Ky_adapted = optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric, n_bins=Cx.shape[0])
+            # 
+            # else:
+
+            #     Cy_adapted = Cy
+            #     Ly_adapted = Ly
+            #     Ky_adapted = Ky
+
             # Compute the penalties
+            # Lx_y = np.sum(Cx * Ly_adapted)
+            # Ly_x = np.sum(Cy_adapted * Lx)
+            # Px_y = Ly_x - Ky_adapted
+            # Py_x = Lx_y - Kx
+
             Lx_y = np.sum(Cx * Ly)
             Ly_x = np.sum(Cy * Lx)
             Px_y = Ly_x - Ky
@@ -155,12 +175,117 @@ class Causality(BaseEstimator):
 
         return Penalties_xy, Penalties_yx
 
-
-    def efficiency(self):
-        return None
-
     def penalty_matrix(self):
-        return None
-        
-    def efficiency_matrix(self):
-        return None
+
+        Penalties = np.zeros((self.X_.shape[1], self.X_.shape[1]))
+
+        for i in np.arange(self.X_.shape[1]):
+
+            # Counts, length, and Kolmogorov complexity for X_i 
+            Cxi = unique_count(x1=self.X_[:,i], numeric1=self.X_isnumeric[i])
+            Lxi = - np.log2(Cxi / np.sum(Cxi))
+            Kxi = optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i])
+
+            for j in np.arange(self.X_.shape[1]):
+
+                # Counts, length, and Kolmogorov complexity for X_j 
+                Cxj = unique_count(x1=self.X_[:,j], numeric1=self.X_isnumeric[j])
+                Lxj = - np.log2(Cxj / np.sum(Cxj))
+                Kxj = optimal_code_length(x1=self.X_[:,j], numeric1=self.X_isnumeric[j])
+
+                # Check if elements are not comparable
+                if Cxi.shape[0] != Cxj.shape[0]:
+                    Penalties[i][j] = np.nan
+                    Penalties[j][i] = np.nan
+                    continue
+
+                Lxj_xi = np.sum(Cxj * Lxi)
+                Lxi_xj = np.sum(Cxi * Lxj)
+                Pxj_xi = Lxi_xj - Kxi
+                Pxi_xj = Lxj_xi - Kxj
+
+                Penalties[i][j] = Pxj_xi
+                Penalties[j][i] = Pxi_xj
+
+        return Penalties
+
+
+    def causality(self):
+
+        causalities_xy = list()
+        causalities_yx = list()
+        strengths      = list()
+
+        # Complexity of the target variable
+        Ky = optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric)
+
+        for i in np.arange(self.X_.shape[1]):
+
+            # Kolmogorov complexity for X_i 
+            Kx = optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i])
+
+            # TODO: Think about this
+            if Kx != 0:
+
+                # Kolmogorov complexity joint
+                Kjoint = optimal_code_length(x1=self.y_, numeric1=self.y_isnumeric, x2=self.X_[:,i], numeric2=self.X_isnumeric[i])
+
+                cxy = (Kjoint - Kx) / Ky
+                cyx = (Kjoint - Ky) / Kx
+
+                causalities_xy.append(cxy)
+                causalities_yx.append(cyx)
+
+                strengths.append( abs(cxy - cyx) )
+
+            else:
+
+                causalities_xy.append(np.nan)
+                causalities_yx.append(np.nan)
+
+                strengths.append(np.nan)
+
+
+        return causalities_xy, causalities_yx, strengths
+
+
+    def causality_matrix(self, return_strength=False):
+
+        np.seterr('raise')
+
+        causalities = np.zeros((self.X_.shape[1], self.X_.shape[1]))
+        strengths   = np.zeros((self.X_.shape[1], self.X_.shape[1]))
+
+        for i in np.arange(self.X_.shape[1]):
+
+            # Kolmogorov complexity for X_i 
+            Ki = optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i])
+
+            # TODO: Think about this
+            if Ki == 0:
+                continue
+
+            for j in np.arange(self.X_.shape[1]):
+
+                # Kolmogorov complexity for X_j 
+                Kj = optimal_code_length(x1=self.X_[:,j], numeric1=self.X_isnumeric[j])
+
+                # TODO: Think about this
+                if Kj == 0:
+                    continue
+
+                # Kolmogorov complexity joint
+                Kjoint = optimal_code_length(x1=self.X_[:,i], numeric1=self.X_isnumeric[i], x2=self.X_[:,j], numeric2=self.X_isnumeric[j])
+
+                # TODO: RemoveME
+                # print("Joint:", Kjoint, "Ki:", Ki, "Kj:", Kj)
+
+                causalities[i][j] = (Kjoint - Ki) / Kj
+                causalities[j][i] = (Kjoint - Kj) / Ki
+
+                strengths[i][j] = strengths[j][i] = abs(causalities[i][j] - causalities[j][i])
+
+        if return_strength:
+            return causalities, strengths
+
+        return causalities
