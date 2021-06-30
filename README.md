@@ -1,10 +1,11 @@
-# Cajal Machine Learning
+# Machine Learning
+## with the Minimum Nescience Principle
 
-`cajal` is a highly efficient open source library for machine learning based on Python and built on top of [scikit-learn](https://scikit-learn.org/stable/). The library is based on the [_minimum nescience principle_](http://www.mathematicsunknown.com/), a novel mathematical theory that measures how well we understand a problem given a representation and a description. In case of machine learning, representations are based on datasets, and descriptions are based on models.
+`nescience` is a highly efficient open source library for machine learning based on Python and built on top of [scikit-learn](https://scikit-learn.org/stable/). The library is based on the [_minimum nescience principle_](http://www.mathematicsunknown.com/), a novel mathematical theory that measures how well we understand a problem given a representation and a description. In case of machine learning, representations are based on datasets, and descriptions are based on models.
 
 The minimum nescience principle allow us to automate the common tasks performed by data scientists, from feature selection, model selection, or hyperparameters optimization.
 
-`cajal` can dramatically increase the productivity of the data scientist, reducing the time to analyze and model a dataset. With `cajal` we can have results in very short time, without decreasing the accuracy (in fact, we usually have a better accuracy). `Cajal` is fast because:
+`nescience` can dramatically increase the productivity of the data scientist, reducing the time to analyze and model a dataset. With `nescience` we can have results in very short time, without decreasing the accuracy (in fact, we usually have a better accuracy). `Nescience` is fast because:
 
 * It does not requires cross-validation
 * It use a greedy search for hyperparameters
@@ -12,7 +13,7 @@ The minimum nescience principle allow us to automate the common tasks performed 
 
 ## The Library
 
-The `cajal` library is composed of the following classes:
+The `nescience` library is composed of the following classes:
 
 * `Miscoding` measures the quality of the dataset we are using to represent our problem.
 * `Inaccuracy` measures the error made by the model we have trained.
@@ -23,7 +24,7 @@ All these metrics are combined into a single quantity, called `Nescience`, as a 
 * `Anomalies` for ...
 * `Causal` for ...
 
-Besides to these classes, the `cajal` library provide the following automated machine-learning tools:
+Besides to these classes, the `nescience` library provide the following automated machine-learning tools:
 
 * `AutoRegression` for automated regression problems
 * `AutoClassification` for automated classification problems
