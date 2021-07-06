@@ -1,14 +1,13 @@
 """
 utils.py
 
-Fast auto machine learning
+Machine learning
 with the minimum nescience principle
 
 @author:    Rafael Garcia Leiva
 @mail:      rgarcialeiva@gmail.com
 @web:       http://www.mathematicsunknown.com/
 @copyright: GNU GPLv3
-@version:   0.8
 """
 
 import numpy as np

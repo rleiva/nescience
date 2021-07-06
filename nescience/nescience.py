@@ -18,6 +18,10 @@ from sklearn.base import BaseEstimator
 from sklearn.utils            import check_X_y
 from sklearn.utils.validation import check_is_fitted
 
+from .miscoding  import Miscoding
+from .surfeit    import Surfeit
+from .inaccuracy import Inaccuracy
+
 
 class Nescience(BaseEstimator):
     """
