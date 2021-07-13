@@ -28,7 +28,7 @@ Besides to these classes, the `nescience` library provide the following automate
 
 * `AutoRegression` for automated regression problems
 * `AutoClassification` for automated classification problems
-* `AutoTimeSeries` for time series based forecasting
+* `TimeSeries` for time series based analysis and forecasting
 
 ## User Guide
 
@@ -36,7 +36,7 @@ This user guide contains the following sections:
 
 * [Auto Classification](https://github.com/rleiva/fastautoml/wiki/Auto-Classification)
 * [Auto Regression](https://github.com/rleiva/fastautoml/wiki/Auto-Regression)
-* [Auto Time Series](https://github.com/rleiva/fastautoml/wiki/Auto-Time-Series)
+* [Time Series](https://github.com/rleiva/fastautoml/wiki/Time-Series-Analysis)
 * [Feature Selection](https://github.com/rleiva/fastautoml/wiki/Feature-Selection)
 * [Model Inaccuacy](https://github.com/rleiva/fastautoml/wiki/Model-Inaccuracy)
 * [Model Complexity](https://github.com/rleiva/fastautoml/wiki/Model-Complexity)
