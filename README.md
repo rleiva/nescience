@@ -1,7 +1,7 @@
 # Machine Learning
 ## with the Minimum Nescience Principle
 
-`nescience` is a highly efficient open source library for machine learning based on Python and built on top of [scikit-learn](https://scikit-learn.org/stable/). The library is based on the [_minimum nescience principle_](http://www.mathematicsunknown.com/), a novel mathematical theory that measures how well we understand a problem given a representation and a description. In case of machine learning, representations are based on datasets, and descriptions are based on models.
+`nescience` is a highly efficient open source library for machine learning based on Python and built on top of [scikit-learn](https://scikit-learn.org/stable/). The library is based on the [_minimum nescience principle_](http://www.mathematicsunknown.com/), a novel mathematical theory that measures how well we understand a problem given a representation and a description. In case of machine learning, representations are based on datasets, and descriptions are based on mathematical models.
 
 The minimum nescience principle allow us to automate the common tasks performed by data scientists, from feature selection, model selection, or hyperparameters optimization.
 
@@ -21,23 +21,25 @@ The `nescience` library is composed of the following classes:
 
 All these metrics are combined into a single quantity, called `Nescience`, as a measure of how well we understand our problem given a dataset and a model. `Nescience` allow us to evaluate and compare models from different model families.
 
-* `Anomalies` for ...
-* `Causal` for ...
+The `nescience` library also contains the following utilities:
+
+* `Anomalies` for the identification and classification of anomalies.
+* `Causal` for cause-effect analysis.
 
 Besides to these classes, the `nescience` library provide the following automated machine-learning tools:
 
-* `AutoRegression` for automated regression problems
-* `AutoClassification` for automated classification problems
-* `TimeSeries` for time series based analysis and forecasting
+* `AutoRegression` for automated regression problems.
+* `AutoClassification` for automated classification problems.
+* `TimeSeries` for time series based analysis and forecasting.
 
 ## User Guide
 
 This user guide contains the following sections:
 
-* [Auto Classification](https://github.com/rleiva/fastautoml/wiki/Auto-Classification)
-* [Auto Regression](https://github.com/rleiva/fastautoml/wiki/Auto-Regression)
-* [Time Series](https://github.com/rleiva/fastautoml/wiki/Time-Series-Analysis)
 * [Feature Selection](https://github.com/rleiva/fastautoml/wiki/Feature-Selection)
 * [Model Inaccuacy](https://github.com/rleiva/fastautoml/wiki/Model-Inaccuracy)
 * [Model Complexity](https://github.com/rleiva/fastautoml/wiki/Model-Complexity)
 * [Hyperparameters Selection](https://github.com/rleiva/fastautoml/wiki/Hyperparameters-Selection)
+* [Auto Classification](https://github.com/rleiva/fastautoml/wiki/Auto-Classification)
+* [Auto Regression](https://github.com/rleiva/fastautoml/wiki/Auto-Regression)
+* [Time Series](https://github.com/rleiva/fastautoml/wiki/Time-Series-Analysis)
