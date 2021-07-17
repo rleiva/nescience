@@ -20,18 +20,18 @@ from sklearn.preprocessing import LabelEncoder
 __all__ = ["discretize_vector", "unique_count", "optimal_code_length"]
 
 
-"""
-Discretize a continous variable using a "uniform" strategy
-    
-Parameters
-----------
-x  : array-like, shape (n_samples)
-       
-Returns
--------
-A new discretized vector of integers.
-"""
 def discretize_vector(x, n_bins=None):
+    """
+    Discretize a continous variable using a "uniform" strategy
+    
+    Parameters
+    ----------
+    x  : array-like, shape (n_samples)
+       
+    Returns
+    -------
+    A new discretized vector of integers.
+    """
 
     length = x.shape[0]
     new_x  = x.copy().reshape(-1, 1)
@@ -89,20 +89,20 @@ def discretize_vector(x, n_bins=None):
     return new_x
 
 
-"""
-Count the number of occurences of a discretized 1d or 2d space
-for classification or regression problems
-    
-Parameters
-----------
-x1, x2, x3: array-like, shape (n_samples)
-numeric1, numeric2, numeric3: if the variable is numeric or not
-       
-Returns
--------
-A vector with the frequencies of the unique values computed.
-"""
 def unique_count(x1, numeric1, x2=None, numeric2=None, x3=None, numeric3=None, n_bins=None):
+    """
+    Count the number of occurences of a discretized 1d or 2d space
+    for classification or regression problems
+    
+    Parameters
+    ----------
+    x1, x2, x3: array-like, shape (n_samples)
+    numeric1, numeric2, numeric3: if the variable is numeric or not
+       
+    Returns
+    -------
+    A vector with the frequencies of the unique values computed.
+    """
 
     # Process first variable
 
@@ -169,22 +169,22 @@ def unique_count(x1, numeric1, x2=None, numeric2=None, x3=None, numeric3=None, n
     return count
 
 
-"""
-Compute the length of a list of features (1d or 2d)
-and / or a target variable (classification or regression)
-using an optimal code using the frequencies of the categorical variables
-or a discretized version of the continuous variables
-    
-Parameters
-----------
-x1, x2, x3: array-like, shape (n_samples)
-numeric1, numeric2, numeric3: if the variable is numeric or not
-
-Returns
--------
-Return the length of the encoded dataset (float)
-"""
 def optimal_code_length(x1, numeric1, x2=None, numeric2=None, x3=None, numeric3=None, n_bins=None):
+    """
+    Compute the length of a list of features (1d or 2d)
+    and / or a target variable (classification or regression)
+    using an optimal code using the frequencies of the categorical variables
+    or a discretized version of the continuous variables
+    
+    Parameters
+    ----------
+    x1, x2, x3: array-like, shape (n_samples)
+    numeric1, numeric2, numeric3: if the variable is numeric or not
+
+    Returns
+    -------
+    Return the length of the encoded dataset (float)
+    """
 
     count = unique_count(x1=x1, numeric1=numeric1, x2=x2, numeric2=numeric2, x3=x3, numeric3=numeric3, n_bins=n_bins)
 
