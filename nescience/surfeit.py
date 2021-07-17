@@ -1,7 +1,7 @@
 """
 surfeit.py
 
-Fast auto machine learning
+Machine learning
 with the minimum nescience principle
 
 @author:    Rafael Garcia Leiva
@@ -65,6 +65,8 @@ class Surfeit(BaseEstimator):
             raise ValueError("Valid options for 'y_type' are {}. "
                              "Got vartype={!r} instead."
                              .format(valid_y_types, y_type))
+
+        self.y_type = type
 
         if y_type == "numeric":
             self.y_isnumeric = True

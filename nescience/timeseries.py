@@ -353,8 +353,20 @@ class TimeSeries(BaseEstimator, RegressorMixin):
         return (nsc, model, viu)
 
 
-    def ExponentialSmoothing(self):
+    def ExponentialSmoothing(self, alpha=0.2):
+        """
+        Learn empirically the miscoding of the features of X
+        as a representation of y.
         
+        Parameters
+        ----------
+        alpha : decay factor
+            
+        Returns
+        -------
+        (nescience, model, variables_in_use)
+        """
+
         alpha = 0.2
         
         # Variables in use

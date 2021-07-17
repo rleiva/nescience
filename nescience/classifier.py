@@ -1,14 +1,13 @@
 """
-autoclassifier.py
+classifier.py
 
-Fast auto machine learning
+Machine learning
 with the minimum nescience principle
 
 @author:    Rafael Garcia Leiva
 @mail:      rgarcialeiva@gmail.com
 @web:       http://www.mathematicsunknown.com/
 @copyright: GNU GPLv3
-@version:   0.8
 """
 
 from .nescience import Nescience
@@ -32,7 +31,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.svm			import SVC
 
 
-class AutoClassifier(BaseEstimator, ClassifierMixin):
+class Classifier(BaseEstimator, ClassifierMixin):
     """
     Given a dataset X = {x1, ..., xp} composed by p features, and a target
     variable y, automatically select the best model for a classification problem.
@@ -42,17 +41,17 @@ class AutoClassifier(BaseEstimator, ClassifierMixin):
 
     Example of usage:
 
-        from fastautoml.autoclassifier import AutoClassifer
+        from nescience.classifier import Classifer
         from sklearn.dataset import load_digits
         X, y = load_digits(return_X_y=True)
-        model = AutoClassifer()
+        model = Classifer()
         model.fit(X, y)
         model.score(X, y)
     """
     
     def __init__(self, auto=True, fast=True, verbose=False, random_state=None):
         """
-        Initialization of the class AutoClassifier
+        Initialization of the class Classifier
         
         Parameters
         ----------

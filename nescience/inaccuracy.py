@@ -1,14 +1,13 @@
 """
 inaccuracy.py
 
-Fast auto machine learning
+Machine learning
 with the minimum nescience principle
 
 @author:    Rafael Garcia Leiva
 @mail:      rgarcialeiva@gmail.com
 @web:       http://www.mathematicsunknown.com/
 @copyright: GNU GPLv3
-@version:   0.8
 """
 
 from .utils import optimal_code_length
@@ -22,12 +21,12 @@ from sklearn.utils.validation import check_is_fitted
 
 class Inaccuracy(BaseEstimator):
     """
-    The fastautoml inaccuracy class allow us to compute the quality of
+    The nescience inaccuracy class allow us to compute the quality of
     the predictions made by a trained model.
 
     Example of usage:
         
-        from fastautoml.inaccuracy import Inaccuracy
+        from nescience.inaccuracy import Inaccuracy
         from sklearn.tree import DecisionTreeClassifier
         from sklearn.datasets import load_digits
 
@@ -56,6 +55,8 @@ class Inaccuracy(BaseEstimator):
             raise ValueError("Valid options for 'y_type' are {}. "
                              "Got vartype={!r} instead."
                              .format(valid_y_types, y_type))
+
+        self.y_type = y_type
 
         if y_type == "numeric":
             self.y_isnumeric = True

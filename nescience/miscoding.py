@@ -1,14 +1,13 @@
 """
 miscoding.py
 
-Fast auto machine learning
+Machine learning
 with the minimum nescience principle
 
 @author:    Rafael Garcia Leiva
 @mail:      rgarcialeiva@gmail.com
 @web:       http://www.mathematicsunknown.com/
 @copyright: GNU GPLv3
-@version:   0.8
 """
 
 from .utils import optimal_code_length
@@ -53,7 +52,7 @@ class Miscoding(BaseEstimator):
 
     Example of usage:
         
-        from fastautoml.miscoding import Miscoding
+        from nescience.miscoding import Miscoding
         from sklearn.datasets import load_beast_cancer
 
         X, y = load_breast_cancer(return_X_y=True)
@@ -200,118 +199,6 @@ class Miscoding(BaseEstimator):
                             .format(valid_modes, mode))
 
         return None 
-
-    
-    def auto_miscoding(self, attribute, min_lag=1, max_lag=None, mode='adjusted'):
-        """
-        Return the auto-miscoding of an attribute, for a number or lags
-
-        Parameters
-        ----------
-        attribute : the attribute to study
-        min_lag   : starting lag
-        max_lag   : end lag. If none, the squared root of the number of samples is used.
-        mode      : the mode of miscoding, possible values are 'regular' for
-                    the true miscoding, 'adjusted' for the normalized inverted
-                    values, and 'partial' with positive and negative
-                    contributions to dataset miscoding.
-            
-        Returns
-        -------
-        Return a numpy array with the lagged miscodings
-        """
-
-        return self.cross_miscoding(attribute1=attribute, attribute2=attribute, min_lag=min_lag, max_lag=max_lag, mode=mode)
-
-
-    def cross_miscoding(self, attribute1, attribute2=None, min_lag=1, max_lag=None, mode='adjusted'):
-        """
-        Return the cross-miscoding of the target given a feature, for a number or lags
-
-        Parameters
-        ----------
-        attribute1 : the explanatory attribute
-        attribute2 : the rolling attribute. If None, the target y will be used instead.
-        min_lag    : starting lag
-        max_lag    : end lag. If none, the squared root of the number of samples is used.
-        mode       : the mode of miscoding, possible values are 'regular' for
-                     the true miscoding, 'adjusted' for the normalized inverted
-                     values, and 'partial' with positive and negative
-                     contributions to dataset miscoding.
-            
-        Returns
-        -------
-        Return a numpy array with the lagged miscodings
-        """        
-
-        check_is_fitted(self)
-
-        valid_modes = ('regular', 'adjusted', 'partial')
-
-        if mode not in valid_modes:
-            raise ValueError("Valid options for 'mode' are {}. "
-                             "Got mode={!r} instead."
-                            .format(valid_modes, mode))
-        
-        lag_mscd = list()
-        
-        # Use a default value for max_lag
-        if max_lag == None:
-            max_lag = int(np.sqrt(self.X_.shape[0]))
-
-        for i in np.arange(start=min_lag, stop=max_lag):
-
-            # Compute lagged vectors
-            if attribute2 is None:
-                new_y = self.y_.copy()
-            else:
-                new_y = self.X_[:,attribute2].copy()
-            new_y = np.roll(new_y, -i)
-            new_y = new_y[:-i]
-
-            if self.X_.ndim == 1:
-                new_x = self.X_.copy()
-            else:
-                new_x = self.X_[:,attribute1].copy()
-            new_x = new_x[:-i]
-
-            ldm_X  = optimal_code_length(x1=new_x, numeric1=self.X_isnumeric[attribute1])
-
-            if attribute2 is None:
-                ldm_y  = optimal_code_length(x1=new_y, numeric1=self.y_isnumeric)
-                ldm_Xy = optimal_code_length(x1=new_x, numeric1=self.X_isnumeric[attribute1], x2=new_y, numeric2=self.y_isnumeric)
-            else:
-                ldm_y  = optimal_code_length(x1=new_y, numeric1=self.X_isnumeric[attribute2])
-                ldm_Xy = optimal_code_length(x1=new_x, numeric1=self.X_isnumeric[attribute1], x2=new_y, numeric2=self.X_isnumeric[attribute2])
-                       
-            mscd = ( ldm_Xy - min(ldm_X, ldm_y) ) / max(ldm_X, ldm_y)
-                
-            lag_mscd.append(mscd)
-                
-        regular = np.array(lag_mscd)
-
-        if mode == 'regular':
-            return regular
-
-        elif mode == 'adjusted':
-
-            adjusted = 1 - regular
-            if np.sum(adjusted) != 0:
-                adjusted = adjusted / np.sum(adjusted)
-            return adjusted
-
-        elif mode == 'partial':
-
-            if np.sum(regular) != 0:
-                partial  = adjusted - regular / np.sum(regular)
-            else:
-                partial  = adjusted
-            return partial
-
-        else:
-            raise ValueError("Valid options for 'mode' are {}. "
-                             "Got mode={!r} instead."
-                            .format(valid_modes, mode))
 
 
     def miscoding_model(self, model, mode='partial'):

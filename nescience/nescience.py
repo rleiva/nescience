@@ -1,14 +1,13 @@
 """
 nescience.py
 
-Fast auto machine learning
+Machine learning
 with the minimum nescience principle
 
 @author:    Rafael Garcia Leiva
 @mail:      rgarcialeiva@gmail.com
 @web:       http://www.mathematicsunknown.com/
 @copyright: GNU GPLv3
-@version:   0.8
 """
 
 import math
@@ -25,12 +24,12 @@ from .inaccuracy import Inaccuracy
 
 class Nescience(BaseEstimator):
     """
-    The fastautoml nescience class allow us to estimate how much
+    The nescience class allow us to estimate how much
     we do know about a problem given a dataset and a model.
 
     Example of usage:
         
-        from fastautoml.nescience import Nescience
+        from nescience.nescience import Nescience
         from sklearn.tree import DecisionTreeClassifier
         from sklearn.datasets import load_digits
 

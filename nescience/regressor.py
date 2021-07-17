@@ -1,14 +1,13 @@
 """
-autoclassifier.py
+regressor.py
 
-Fast auto machine learning
+Machine learning
 with the minimum nescience principle
 
 @author:    Rafael Garcia Leiva
 @mail:      rgarcialeiva@gmail.com
 @web:       http://www.mathematicsunknown.com/
 @copyright: GNU GPLv3
-@version:   0.8
 """
 
 import numpy  as np
@@ -25,8 +24,10 @@ from sklearn.linear_model   import LinearRegression
 from sklearn.tree           import DecisionTreeRegressor
 from sklearn.svm            import LinearSVR
 from sklearn.neural_network import MLPRegressor
+
+from .nescience import Nescience
     
-class AutoRegressor(BaseEstimator, RegressorMixin):
+class Regressor(BaseEstimator, RegressorMixin):
     
     # TODO: Class documentation
 
