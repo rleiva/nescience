@@ -11,13 +11,17 @@ with the minimum nescience principle
 """
 
 import numpy  as np
+import pandas as pd
 
 from sklearn.base import BaseEstimator, RegressorMixin																					
 from sklearn.utils.validation import check_is_fitted
 from sklearn.utils            import column_or_1d
 from sklearn.utils            import check_array
 
-from .utils import optimal_code_length
+from sklearn.linear_model     import LinearRegression
+
+from nescience.utils import optimal_code_length
+from nescience.nescience import Nescience
 
 # from .nescience import Nescience
 
@@ -117,15 +121,9 @@ class TimeSeries(BaseEstimator, RegressorMixin):
                 self.X_isnumeric = [True] * X.shape[1]
     
 
-    def auto_timeseries(self, y, X=None, auto=True):
+    def auto_timeseries(self):
         """
         Select the best model that explains the time series ts.
-        
-        Parameters
-        ----------            
-        ts : array-like, shape (n_samples)
-             The time series as numbers.
-        auto: compute automatically the optimal model
         """
 
         # Supported time series models
@@ -136,7 +134,7 @@ class TimeSeries(BaseEstimator, RegressorMixin):
             self.ExponentialSmoothing
         ]
 
-        self.X_, self.y_ = self._whereIsTheX(ts)
+        self.X_, self.y_ = self._whereIsTheX(self.y_)
 
         self.nescience_ = Nescience(X_type="numeric", y_type="numeric")
         self.nescience_.fit(self.X_, self.y_)
@@ -146,16 +144,14 @@ class TimeSeries(BaseEstimator, RegressorMixin):
         self.viu_   = None
 
         # Find optimal model
-        if self.auto:
-        
-            for reg in self.models_:
+        for reg in self.models_:
             
-                (new_nsc, new_model, new_viu) = reg()
+            (new_nsc, new_model, new_viu) = reg()
             
-                if new_nsc < nsc: 
-                    nsc   = new_nsc
-                    self.model_ = new_model
-                    self.viu_   = new_viu
+            if new_nsc < nsc: 
+                nsc   = new_nsc
+                self.model_ = new_model
+                self.viu_   = new_viu
         
         return self
 
