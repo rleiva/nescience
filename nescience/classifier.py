@@ -13,6 +13,7 @@ with the minimum nescience principle
 from .nescience import Nescience
 
 import numpy  as np
+from joblib import Parallel, delayed
 
 from sklearn.base import BaseEstimator, ClassifierMixin												
 														
@@ -365,50 +366,82 @@ class Classifier(BaseEstimator, ClassifierMixin):
         return (nsc, model, None)
 
 
-    def DecisionTreeClassifier(self):
+    # Helper function to train an optimal decison tree in parallel
+    def _create_tree_helper(self, ccp_alpha, min_samples_leaf=5):
+
+        model = DecisionTreeClassifier(ccp_alpha=ccp_alpha, min_samples_leaf=min_samples_leaf, max_features="auto")
+        model.fit(self.X_, self.y_)
+        nsc = self.nescience_.nescience(model)
+
+        return (nsc, model)
+
+
+    def DecisionTreeClassifier(self, min_samples_leaf=5, alpha_tol=1e-7, n_jobs=1):
         """
-        Find the best model (hyperparameters optimization) in the familiy of decision trees       
-		
+        Find the best model (hyperparameters optimization) in the familiy of decision trees    
+
+        Parameters
+        ----------
+        min_samples_leaf : We can restrict the minimum number of samples per leave,
+                           if the algorithm is too slow
+        alpha_tol:         Tolerance factor for the ccp_alpha values
+        n_jobs:            Number of parallel jobs
+   
         Return
         ------
         best_nsc   : best nescience achieved
         best_model : a trained DecisionTreeClassifer
-        best_viu   : None, since all the variables are used as input 
+        best_viu   : None, since all the variables are used as input
         """
 
-        # We restrict ourselves to at least 5 samples per leave,
-        # otherwise the algorithm could take too much time to converge,
-        # Anyway, the limit of 5 is considered a good practice in ML
-        clf  = DecisionTreeClassifier(min_samples_leaf=5)
+        # Compute all the possible prunning points
 
-        # Compute prunning points
-        path = clf.cost_complexity_pruning_path(self.X_, self.y_)
+        clf    = DecisionTreeClassifier(min_samples_leaf=min_samples_leaf, max_features="auto", random_state=self.random_state)
+        path   = clf.cost_complexity_pruning_path(self.X_, self.y_)
+        
+        # Some alphas are duplicated
+        ccp_alphas = np.unique(path.ccp_alphas) 
+        
+        # Some alphas are too close
+        alphas = list()
+        prev_alpha = 1
+        for new_alpha in reversed(ccp_alphas):
+            if prev_alpha - new_alpha < alpha_tol:
+                 continue
+            alphas.append(new_alpha)
+            prev_alpha = new_alpha
 
-        previous_nodes = -1
-        best_nsc       = 1
-        best_model     = None
+        # Search for the best prunning point
 
-        # For every possible prunning point in reverse order
-        for ccp_alpha in reversed(path.ccp_alphas):
+        if n_jobs != 1:    # Parallel search
+            results = Parallel(n_jobs=n_jobs)(delayed(self._create_tree_helper)(ccp_alpha) for ccp_alpha in alphas)
+
+        else:              # Sequential search
+
+            results = list()
+            previous_nodes = -1
+
+            for ccp_alpha in reversed(alphas):
     
-            model = DecisionTreeClassifier(ccp_alpha=ccp_alpha, min_samples_leaf=5, random_state=self.random_state)
-            model.fit(self.X_, self.y_)
+                model = DecisionTreeClassifier(ccp_alpha=ccp_alpha, min_samples_leaf=min_samples_leaf, max_features="auto", random_state=self.random_state)
+                model.fit(self.X_, self.y_)
     
-            # Skip evaluation if nothing has changed
-            if model.tree_.node_count == previous_nodes:
-                continue
+                # Skip evaluation if nothing has changed
+                if model.tree_.node_count == previous_nodes:
+                    continue
     
-            previous_nodes = model.tree_.node_count
-    
-            new_nsc = self.nescience_.nescience(model)
-    
-            if new_nsc < best_nsc:
-                best_nsc   = new_nsc
+                previous_nodes = model.tree_.node_count
+                nsc = self.nescience_.nescience(model)
+
+                results.append((nsc, model))
+
+
+        # Find the best prunning point
+        best_nsc = 10e6
+        for nsc, model in results:
+            if nsc < best_nsc:
+                best_nsc   = nsc
                 best_model = model
-            else:
-                if self.fast:
-                    # Early stop
-                    break
 
         return (best_nsc, best_model, None)
 
