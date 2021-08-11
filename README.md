@@ -43,3 +43,4 @@ This user guide contains the following sections:
 * [Auto Classification](https://github.com/rleiva/fastautoml/wiki/Auto-Classification)
 * [Auto Regression](https://github.com/rleiva/fastautoml/wiki/Auto-Regression)
 * [Time Series](https://github.com/rleiva/fastautoml/wiki/Time-Series-Analysis)
+* [Anomalies Detection](https://github.com/rleiva/nescience/wiki/Anomalies-Detection)
