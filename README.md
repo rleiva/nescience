@@ -24,13 +24,35 @@ All these metrics are combined into a single quantity, called `Nescience`, as a 
 The `nescience` library also contains the following utilities:
 
 * `Anomalies` for the identification and classification of anomalies.
-* `Causal` for cause-effect analysis.
+* `Causal` for root-cause analysis.
 
 Besides to these classes, the `nescience` library provide the following automated machine-learning tools:
 
-* `AutoRegression` for automated regression problems.
-* `AutoClassification` for automated classification problems.
+* `Regression` for automated regression problems.
+* `Classification` for automated classification problems.
 * `TimeSeries` for time series based analysis and forecasting.
+
+## Installation
+
+The `nescience` library can be installed using the standard `pip` installer:
+
+```python
+pip install nescience
+```
+
+The following code constains a simple example of how to use the auto-classifer module of the library:
+
+```python
+rom sklearn.datasets import load_breast_cancer
+from nescience.classifier import Classifier
+
+X, y = load_breast_cancer(return_X_y=True)
+
+model = Classifier()
+model.fit(X, y)
+model.score(X, y)
+```
+
 
 ## User Guide
 
