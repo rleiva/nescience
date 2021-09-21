@@ -15,10 +15,10 @@ import pandas as pd
 
 from sklearn.base import BaseEstimator, RegressorMixin																					
 from sklearn.utils.validation import check_is_fitted
-from sklearn.utils            import column_or_1d
-from sklearn.utils            import check_array
+from sklearn.utils import column_or_1d
+from sklearn.utils import check_array
 
-from sklearn.linear_model     import LinearRegression
+from sklearn.linear_model import LinearRegression
 
 from nescience.utils import optimal_code_length
 from nescience.nescience import Nescience
@@ -47,16 +47,17 @@ class TimeSeries(BaseEstimator, RegressorMixin):
         model.predict(1)
     """
 
-    def __init__(self, y_type="numeric", multivariate=False, X_type="numeric"):
+    def __init__(self, X_type="numeric", y_type="numeric", multivariate=False, auto=True):
         """
         Initialization of the class TimeSeries
         
         Parameters
         ----------
-        y_type:       The type of the time series, numeric or categorical
-        multivariate: "True" if we have other time series available as predictors
         X_type:       The type of the predictors, numeric, mixed or categorical,
                       in case of having a multivariate time series
+        y_type:       The type of the time series, numeric or categorical
+        multivariate: "True" if we have other time series available as predictors
+        auto:         "True" if we want to find automatically the optimal model
         """        
 
         valid_y_types = ("numeric", "categorical")
@@ -75,6 +76,7 @@ class TimeSeries(BaseEstimator, RegressorMixin):
         self.X_type       = X_type
         self.y_type       = y_type
         self.multivariate = multivariate
+        self.auto         = auto
 
 
     def fit(self, y, X=None):
@@ -120,40 +122,36 @@ class TimeSeries(BaseEstimator, RegressorMixin):
                 self.X_ = check_array(X)
                 self.X_isnumeric = [True] * X.shape[1]
     
+        # Auto Time Series
+        if self.auto:
 
-    def auto_timeseries(self):
-        """
-        Select the best model that explains the time series ts.
-        """
+            # Supported time series models
+            self.models_ = [
+                self.AutoRegressive,
+                self.MovingAverage,
+                self.ExponentialSmoothing
+            ]
 
-        # Supported time series models
+            self.X_, self.y_ = self._whereIsTheX(self.y_)
+
+            self.nescience_ = Nescience(X_type="numeric", y_type="numeric")
+            self.nescience_.fit(self.X_, self.y_)
         
-        self.models_ = [
-            self.AutoRegressive,
-            self.MovingAverage,
-            self.ExponentialSmoothing
-        ]
+            nsc = 1
+            self.model_ = None
+            self.viu_   = None
 
-        self.X_, self.y_ = self._whereIsTheX(self.y_)
-
-        self.nescience_ = Nescience(X_type="numeric", y_type="numeric")
-        self.nescience_.fit(self.X_, self.y_)
-        
-        nsc = 1
-        self.model_ = None
-        self.viu_   = None
-
-        # Find optimal model
-        for reg in self.models_:
+            # Find optimal model
+            for reg in self.models_:
             
-            (new_nsc, new_model, new_viu) = reg()
+                (new_nsc, new_model, new_viu) = reg()
             
-            if new_nsc < nsc: 
-                nsc   = new_nsc
-                self.model_ = new_model
-                self.viu_   = new_viu
+                if new_nsc < nsc: 
+                    nsc   = new_nsc
+                    self.model_ = new_model
+                    self.viu_   = new_viu
         
-        return self
+            return self
 
 
     """
@@ -254,7 +252,6 @@ class TimeSeries(BaseEstimator, RegressorMixin):
         -------
         self
         """
-
         
         # Relevance of features
         msd = self.nescience_.miscoding_.miscoding_features()
