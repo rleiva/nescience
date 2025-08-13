@@ -1,68 +1,41 @@
-# Machine Learning
-## with the Minimum Nescience Principle
+# nescience
 
-`nescience` is a highly efficient open source library for machine learning based on Python and built on top of [scikit-learn](https://scikit-learn.org/stable/). The library is based on the [_minimum nescience principle_](http://www.mathematicsunknown.com/), a novel mathematical theory that measures how well we understand a problem given a representation and a description. In case of machine learning, representations are based on datasets, and descriptions are based on mathematical models.
+**Machine learning guided by the Minimum Nescience Principle** — pick models and features
+by minimizing a three-part objective:
+- **μ (miscoding)** — representation inadequacy (low MI between X and y).
+- **ι (inaccuracy)** — predictive error on fresh data.
+- **σ (surfeit)** — model superfluity/complexity.
 
-The minimum nescience principle allow us to automate the common tasks performed by data scientists, from feature selection, model selection, or hyperparameters optimization.
+The library provides metrics, a unified **Nescience** objective, and search wrappers that choose
+both features and estimators with scikit-learn compatibility.
 
-`nescience` can dramatically increase the productivity of the data scientist, reducing the time to analyze and model a dataset. With `nescience` we can have results in very short time, without decreasing the accuracy (in fact, we usually have a better accuracy). `Nescience` is fast because:
+> Research background: R. A. Garcia Leiva, *A Mathematical Theory of the Unknown* (Theory of Nescience).
 
-* It does not requires cross-validation
-* It use a greedy search for hyperparameters
-* It is not based on ensembles of models
+## Quick start
 
-## The Library
-
-The `nescience` library is composed of the following classes:
-
-* `Miscoding` measures the quality of the dataset we are using to represent our problem.
-* `Inaccuracy` measures the error made by the model we have trained.
-* `Surfeit` measures how (unnecessarily) complex is the model we have identified.
-
-All these metrics are combined into a single quantity, called `Nescience`, as a measure of how well we understand our problem given a dataset and a model. `Nescience` allow us to evaluate and compare models from different model families.
-
-The `nescience` library also contains the following utilities:
-
-* `Anomalies` for the identification and classification of anomalies.
-* `Causal` for root-cause analysis.
-
-Besides to these classes, the `nescience` library provide the following automated machine-learning tools:
-
-* `Regression` for automated regression problems.
-* `Classification` for automated classification problems.
-* `TimeSeries` for time series based analysis and forecasting.
-
-## Installation
-
-The `nescience` library can be installed using the standard `pip` installer:
-
-```python
-pip install nescience
+```bash
+pip install -U nescience
 ```
 
-The following code constains a simple example of how to use the auto-classifer module of the library:
-
 ```python
-rom sklearn.datasets import load_breast_cancer
-from nescience.classifier import Classifier
-
+from nescience.estimators import NescienceClassifier
+from sklearn.datasets import load_breast_cancer
 X, y = load_breast_cancer(return_X_y=True)
 
-model = Classifier()
-model.fit(X, y)
-model.score(X, y)
+clf = NescienceClassifier(search_budget=60, random_state=0)
+clf.fit(X, y)
+print(clf.best_estimator_)
+print(clf.nescience_breakdown_)
 ```
 
+## Philosophy (short)
 
-## User Guide
+- **μ**: If the representation barely informs the target, you are doomed. We approximate this with normalized mutual information between features and target.
+- **ι**: If predictions fail on unseen data, the description is inaccurate. We estimate with task-appropriate loss.
+- **σ**: If the model is overly complex relative to the data, you’re probably memorizing. We approximate with a normalized description-length proxy.
 
-This user guide contains the following sections:
+Each component is pluggable.
 
-* [Feature Selection](https://github.com/rleiva/fastautoml/wiki/Feature-Selection)
-* [Model Inaccuacy](https://github.com/rleiva/fastautoml/wiki/Model-Inaccuracy)
-* [Model Complexity](https://github.com/rleiva/fastautoml/wiki/Model-Complexity)
-* [Hyperparameters Selection](https://github.com/rleiva/fastautoml/wiki/Hyperparameters-Selection)
-* [Auto Classification](https://github.com/rleiva/fastautoml/wiki/Auto-Classification)
-* [Auto Regression](https://github.com/rleiva/fastautoml/wiki/Auto-Regression)
-* [Time Series](https://github.com/rleiva/fastautoml/wiki/Time-Series-Analysis)
-* [Anomalies Detection](https://github.com/rleiva/nescience/wiki/Anomalies-Detection)
+## Status
+
+This is a reboot (v0.2.0). API may evolve before v1.0. See the roadmap in `CONTRIBUTING.md`.
