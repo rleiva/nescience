@@ -1,0 +1,71 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mnp"
+version = "0.2.0"
+description = "Machine learning guided by the Minimum Nescience Principle"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Rafael A. Garcia Leiva", email = "rgarcialeiva@gmail.com" }
+]
+keywords = ["nescience", "machine-learning", "model-selection", "feature-selection", "automl", "anomalies detection"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
+]
+
+dependencies = [
+  "numpy>=1.23",
+  "scipy>=1.9",
+  "scikit-learn>=1.6,<1.8",
+  "joblib>=1.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "mypy>=1.10",
+  "ruff>=0.5.0",
+  "black>=24.3.0",
+  "pre-commit>=3.7.0",
+  "mkdocs>=1.6.0",
+  "mkdocs-material>=9.5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/rleiva/nescience"
+Documentation = "https://github.com/rleiva/nescience#readme"
+Source = "https://github.com/rleiva/nescience"
+Issues = "https://github.com/rleiva/nescience/issues"
+
+[tool.hatch.build]
+include = ["src/nescience", "LICENSE", "README.md", "CITATION.cff", "pyproject.toml"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_configs = true
+exclude = ["docs/"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+lint.select = ["E", "F", "I", "UP", "B", "C4"]
+lint.ignore = ["E501"]
+
+[tool.black]
+line-length = 100
+
