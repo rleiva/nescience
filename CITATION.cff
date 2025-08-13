@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "nescience: Machine learning guided by the Minimum Nescience Principle"
+authors:
+  - family-names: "Garcia Leiva"
+    given-names: "Rafael A."
+date-released: "2025-08-12"
+version: "0.2.0"
+repository-code: "https://github.com/rleiva/nescience"
+preferred-citation:
+  type: book
+  title: "A Mathematical Theory of the Unknown: Journey Beyond the Frontiers of Human Understanding"
+  authors:
+    - family-names: "Garcia Leiva"
+      given-names: "Rafael A."
+  year: 2025
+  url: "https://leanpub.com/nescience"
+
